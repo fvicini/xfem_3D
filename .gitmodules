@@ -1,0 +1,3 @@
+[submodule "gedim"]
+	path = gedim
+	url = https://github.com/fvicini/gedim.git
