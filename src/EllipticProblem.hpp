@@ -3,10 +3,39 @@
 
 #include "Configurations.hpp"
 
+#include "GeometryUtilities.hpp"
+
 #include <string>
 
 namespace XFEM_3D
 {
+
+  class Fracture3D
+  {
+    // Attributes
+    private:
+      Eigen::MatrixXd polygon;
+      Eigen::Vector3d normal;
+      Eigen::Vector3d translation;
+      Eigen::Matrix3d rotation;
+
+    // Methods
+    public:
+      Fracture3D();
+      ~Fracture3D();
+      Fracture3D(Eigen::MatrixXd, Eigen::Vector3d, Eigen::Vector3d, Eigen::Matrix3d);
+
+      inline Eigen::MatrixXd getPolygon()     { return this->polygon; }
+      inline Eigen::Vector3d getNormal()      { return this->normal; }
+      inline Eigen::Vector3d getTranslation() { return this->translation; }
+      inline Eigen::Matrix3d getRotation()    { return this->rotation; }
+
+      inline Eigen::Vector3d getOrigin() { return this->polygon(Eigen::seq(0,2), 0); }
+
+
+  };
+
+
   class EllipticProblem_ProgramConfiguration final
   {
     public:
@@ -22,6 +51,7 @@ namespace XFEM_3D
       { return Gedim::Configurations::GetPropertyValue<int>("Pippo"); }
   };
 
+
   class EllipticProblem final
   {
     private:
@@ -32,7 +62,11 @@ namespace XFEM_3D
       ~EllipticProblem();
 
       void Run();
-  };
+
+    private:
+      bool FractureItersectsElement(Fracture3D*, Gedim::GeometryUtilities::Polyhedron);
+};
+
 
 }
 

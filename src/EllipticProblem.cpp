@@ -8,6 +8,7 @@
 #include "Eigen_SparseArray.hpp"
 #include "Eigen_Array.hpp"
 #include "Eigen_CholeskySolver.hpp"
+#include "math.h"
 
 using namespace std;
 using namespace Eigen;
@@ -69,19 +70,36 @@ void EllipticProblem::Run()
     Gedim::LogFile::LogFolder = logFolder;
 
     /// Get problem data
+    // Create domain
     const Gedim::GeometryUtilities::Polyhedron block = geometryUtilities.CreateCubeWithOrigin(Eigen::Vector3d(0.0, 0.0, 0.0),
-                                                                                              1.0);
-    const Eigen::MatrixXd fracture3D = geometryUtilities.CreateParallelogram(Eigen::Vector3d(-0.5, -0.5, 0.5),
-                                                                             Eigen::Vector3d(2.0, 0.0, 0.0),
-                                                                             Eigen::Vector3d(0.0, 2.0, 0.0));
-    const Eigen::Vector3d fractureNormal = geometryUtilities.PolygonNormal(fracture3D);
-    const Eigen::Vector3d fractureTranslation = geometryUtilities.PolygonTranslation(fracture3D);
-    const Eigen::Matrix3d fractureRotationMatrix = geometryUtilities.PolygonRotationMatrix(fracture3D,
-                                                                                           fractureNormal,
-                                                                                           fractureTranslation);
-    const Eigen::MatrixXd fracture2D = geometryUtilities.RotatePointsFrom3DTo2D(fracture3D,
-                                                                                fractureRotationMatrix.transpose(),
-                                                                                fractureTranslation);
+                                                                                             1.0);
+
+    // Create fracture network
+    const unsigned int num_fractures = 1;
+    vector<Fracture3D*> fractureNetwork;
+
+    const MatrixXd f3D = geometryUtilities.CreateParallelogram(Vector3d(-0.5, -0.5, 0.5),
+                                                               Vector3d(2.0, 0.0, 0.0),
+                                                               Vector3d(0.0, 2.0, 0.0));
+    const Vector3d fNormal = geometryUtilities.PolygonNormal(f3D);
+    const Vector3d fTransl = geometryUtilities.PolygonTranslation(f3D);
+    const Matrix3d fRot = geometryUtilities.PolygonRotationMatrix(f3D,
+                                                                  fNormal,
+                                                                  fTransl);
+    const MatrixXd fracture2D = geometryUtilities.RotatePointsFrom3DTo2D(f3D,
+                                                                         fRot.transpose(),
+                                                                         fTransl);
+
+    fractureNetwork.push_back(new Fracture3D(f3D, fNormal, fTransl, fRot));
+
+
+    // Export Fracture
+    for (unsigned int f = 0; f < num_fractures; f++)
+    {
+        Gedim::VTKUtilities vtkUtilities;
+        vtkUtilities.AddPolygon(fractureNetwork.at(f)->getPolygon());
+        vtkUtilities.Export(exportVtuFolder + "/Facture" + to_string(f) + ".vtu");
+    }
 
     // Export block
     {
@@ -92,14 +110,8 @@ void EllipticProblem::Run()
         vtkUtilities.Export(exportVtuFolder + "/Block.vtu");
     }
 
-    // Export fracture3D
-    {
-        Gedim::VTKUtilities vtkUtilities;
-        vtkUtilities.AddPolygon(fracture3D);
-        vtkUtilities.Export(exportVtuFolder + "/Facture.vtu");
-    }
 
-    /// Create block mesh
+    // Create block mesh
     Gedim::Output::PrintGenericMessage("Create Block Mesh...", true);
 
     Gedim::MeshMatrices blockMeshData;
@@ -110,6 +122,7 @@ void EllipticProblem::Run()
                                         block.Faces,
                                         config.MeshMaximumTetrahedronVolume(),
                                         blockMesh);
+
 
     // Export the block mesh
     meshUtilities.ExportMeshToVTU(blockMesh,
@@ -127,7 +140,9 @@ void EllipticProblem::Run()
                                        0.1,
                                        fractureMesh);
 
+
     // Export the block mesh
+
     meshUtilities.ExportMeshToVTU(fractureMesh,
                                   exportVtuFolder,
                                   "Fracture_Mesh");
@@ -142,32 +157,132 @@ void EllipticProblem::Run()
     string exportTest = "./TEST";
     Gedim::Output::CreateFolder(exportTest);
 
+
+    // Determine the effective number of DOFs (enrichment included).
+    // Construction of boolean matrices
+    double numDofs = blockMeshData.NumberCell0D; // Not so true: Dirichlet conditions?
+
+    Gedim::Eigen_SparseArray<> toEnrich_elements;
+    Gedim::Eigen_SparseArray<> toenrich_nodes;
+
+    toEnrich_elements.Create();
+    toenrich_nodes.Create();
+
+    toEnrich_elements.SetSize(blockMesh.Cell3DTotalNumber(), num_fractures);
+    toenrich_nodes.SetSize(blockMeshData.NumberCell0D, num_fractures);
+
+    for (unsigned int e = 0; e < blockMesh.Cell3DTotalNumber(); e++)
+    {
+        const Gedim::GeometryUtilities::Polyhedron element = meshUtilities.MeshCell3DToPolyhedron(blockMesh, e);
+
+        for (unsigned int f = 0; f < num_fractures; f++)
+        {
+            if (FractureItersectsElement(fractureNetwork.at(f), element))
+            {
+                // Set (e,f) entry of matrix to true, meaning element e is to enrich wrt fracture f.
+                toEnrich_elements.Triplet(e, f, 1);
+
+                // Retrieve the global Id of the verteces of element -> possible?
+
+
+
+
+                // Export reproducing element to Paraview for visualization
+                {
+                    const vector<double> cellVolume(1, meshGeometricData.Cell3DsVolumes[e]);
+                    Gedim::VTKUtilities vtkUtilities;
+                    vtkUtilities.AddPolyhedron(element.Vertices,
+                                               element.Edges,
+                                               element.Faces
+                                               /*{
+                                                   {
+                                                       "Volume",
+                                                       Gedim::VTPProperty::Cells,
+                                                       static_cast<unsigned int>(cellVolume.size()),
+                                                       cellVolume.data()
+                                                   }
+                                               }*/);
+                    vtkUtilities.Export(exportTest +
+                                        "/ReproducingElement_" +
+                                        to_string(e) +
+                                        ".vtu");
+                }
+            }
+            else // This is just to export the non-reproducing FEs to Paraview and compare them
+            {
+                {
+                    const vector<double> cellVolume(1, meshGeometricData.Cell3DsVolumes[e]);
+                    Gedim::VTKUtilities vtkUtilities;
+                    vtkUtilities.AddPolyhedron(element.Vertices,
+                                               element.Edges,
+                                               element.Faces
+                                               /*{
+                                                   {
+                                                       "Volume",
+                                                       Gedim::VTPProperty::Cells,
+                                                       static_cast<unsigned int>(cellVolume.size()),
+                                                       cellVolume.data()
+                                                   }
+                                               }*/);
+                    vtkUtilities.Export(exportTest +
+                                        "/StandardElement_" +
+                                        to_string(e) +
+                                        ".vtu");
+                }
+            }
+
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     for (unsigned int c = 0; c < blockMesh.Cell3DTotalNumber(); c++)
     {
-        const Eigen::MatrixXd vertices = blockMesh.Cell3DVerticesCoordinates(c);
+        const MatrixXd vertices = blockMesh.Cell3DVerticesCoordinates(c);
 
         const Gedim::GeometryUtilities::Polyhedron cellToPolyhedron = meshUtilities.MeshCell3DToPolyhedron(blockMesh,
                                                                                                            c);
 
-        {
-            const vector<double> cellVolume(1, meshGeometricData.Cell3DsVolumes[c]);
-            Gedim::VTKUtilities vtkUtilities;
-            vtkUtilities.AddPolyhedron(cellToPolyhedron.Vertices,
-                                       cellToPolyhedron.Edges,
-                                       cellToPolyhedron.Faces,
-                                       {
-                                           {
-                                               "Volume",
-                                               Gedim::VTPProperty::Cells,
-                                               static_cast<unsigned int>(cellVolume.size()),
-                                               cellVolume.data()
-                                           }
-                                       });
-            vtkUtilities.Export(exportTest +
-                                "/Cell_" +
-                                to_string(c) +
-                                ".vtu");
-        }
+//        {
+//            const vector<double> cellVolume(1, meshGeometricData.Cell3DsVolumes[c]);
+//            Gedim::VTKUtilities vtkUtilities;
+//            vtkUtilities.AddPolyhedron(cellToPolyhedron.Vertices,
+//                                       cellToPolyhedron.Edges,
+//                                       cellToPolyhedron.Faces,
+//                                       {
+//                                           {
+//                                               "Volume",
+//                                               Gedim::VTPProperty::Cells,
+//                                               static_cast<unsigned int>(cellVolume.size()),
+//                                               cellVolume.data()
+//                                           }
+//                                       });
+//            vtkUtilities.Export(exportTest +
+//                                "/Cell_" +
+//                                to_string(c) +
+//                                ".vtu");
+//        }
 
     }
 
@@ -179,7 +294,6 @@ void EllipticProblem::Run()
     /// Assemble System
     Gedim::Output::PrintGenericMessage("Assemble System FEM...", true);
 
-    double numDofs = 3;
 
     Gedim::Eigen_SparseArray<> globalMatrixA;
     Gedim::Eigen_Array<> rightHandSide;
@@ -187,8 +301,8 @@ void EllipticProblem::Run()
 
     if (numDofs > 0)
     {
-        Eigen::MatrixXd cellMatrix = Eigen::MatrixXd::Zero(3, 5);
-        Eigen::VectorXd cellVector = Eigen::VectorXd::Zero(5);
+        MatrixXd cellMatrix = MatrixXd::Zero(3, 5);
+        VectorXd cellVector = VectorXd::Zero(5);
 
         cellMatrix(0, 1) = 3.4;
         cellVector[1] = 3;
@@ -234,5 +348,56 @@ void EllipticProblem::Run()
 
     Gedim::Output::PrintStatusProgram("Solve");
 }
-// ***************************************************************************
+
+
+bool EllipticProblem::FractureItersectsElement(Fracture3D *fracture,
+                                               Gedim::GeometryUtilities::Polyhedron element)
+{
+
+    Vector3d normal = fracture->getNormal();
+    Vector3d x = fracture->getOrigin();
+    double a = normal(0);
+    double b = normal(1);
+    double c = normal(2);
+    double d = -a*x(0) - b*x(1) - c*x(2);
+    vector<double> signed_distances;
+
+    for (unsigned int i = 0; i <= 3; i++)
+    {
+        double sdf;
+        Vector3d p = element.Vertices(seq(0,2), i);
+        sdf = (a*p(0) + b*p(1) + c*p(2) + d) / (sqrt(a*a + b*b + c*c));
+        signed_distances.push_back(sdf);
+    }
+
+    double max_sd = *max_element(signed_distances.begin(),
+                                 signed_distances.end());
+    double min_sd = *min_element(signed_distances.begin(),
+                                 signed_distances.end());
+
+    if (max_sd * min_sd < 0)
+    {
+        // element is cut by the fracture
+        return true;
+    }
+
+    return false;
+
+}
+
+// *************************************************************************** Class Fracture3D
+
+Fracture3D::Fracture3D(Eigen::MatrixXd pol,
+                       Eigen::Vector3d norm,
+                       Eigen::Vector3d transl,
+                       Eigen::Matrix3d rot)
+{
+    this->polygon     = pol;
+    this->normal      = norm;
+    this->translation = transl;
+    this->rotation    = rot;
+
+}
+
+
 }
