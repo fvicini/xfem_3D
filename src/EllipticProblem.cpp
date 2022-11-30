@@ -74,23 +74,25 @@ void EllipticProblem::Run()
     const Gedim::GeometryUtilities::Polyhedron block = geometryUtilities.CreateCubeWithOrigin(Eigen::Vector3d(0.0, 0.0, 0.0),
                                                                                              1.0);
 
-    // Create fracture network
+    // Create fracture network (here only one is appended to the vector)
     const unsigned int num_fractures = 1;
     vector<Fracture3D*> fractureNetwork;
+    vector<MatrixXd>    fractureNetwork2D;
 
-    const MatrixXd f3D = geometryUtilities.CreateParallelogram(Vector3d(-0.5, -0.5, 0.5),
-                                                               Vector3d(2.0, 0.0, 0.0),
-                                                               Vector3d(0.0, 2.0, 0.0));
-    const Vector3d fNormal = geometryUtilities.PolygonNormal(f3D);
-    const Vector3d fTransl = geometryUtilities.PolygonTranslation(f3D);
-    const Matrix3d fRot = geometryUtilities.PolygonRotationMatrix(f3D,
-                                                                  fNormal,
-                                                                  fTransl);
-    const MatrixXd fracture2D = geometryUtilities.RotatePointsFrom3DTo2D(f3D,
-                                                                         fRot.transpose(),
-                                                                         fTransl);
+    fractureNetwork.push_back(new Fracture3D(Vector3d(-0.5, -0.5, 0.5),
+                                             Vector3d(2.0, 0.0, 0.0),
+                                             Vector3d(0.0, 2.0, 0.0),
+                                             geometryUtilities));
 
-    fractureNetwork.push_back(new Fracture3D(f3D, fNormal, fTransl, fRot));
+
+    // For every fracture, create the corresponding 2D domain.
+    for (unsigned int f = 0; f < num_fractures; f++)
+    {
+        const MatrixXd fracture2D = geometryUtilities.RotatePointsFrom3DTo2D(fractureNetwork.at(f)->getPolygon(),
+                                                                             fractureNetwork.at(f)->getRotation().transpose(),
+                                                                             fractureNetwork.at(f)->getTranslation());
+        fractureNetwork2D.push_back(fracture2D);
+    }
 
 
     // Export Fracture
@@ -131,23 +133,25 @@ void EllipticProblem::Run()
 
     Gedim::Output::PrintStatusProgram("Create Block Mesh");
 
-    Gedim::Output::PrintGenericMessage("Create Fracture Mesh...", true);
+    // Create mesh for every 2D fracture in fractureNetwork2D
 
-    Gedim::MeshMatrices fractureMeshData;
-    Gedim::MeshMatricesDAO fractureMesh(fractureMeshData);
+//    Gedim::Output::PrintGenericMessage("Create Fracture Mesh...", true);
 
-    meshUtilities.CreateTriangularMesh(fracture2D,
-                                       0.1,
-                                       fractureMesh);
+//    Gedim::MeshMatrices fractureMeshData;
+//    Gedim::MeshMatricesDAO fractureMesh(fractureMeshData);
+
+//    meshUtilities.CreateTriangularMesh(fracture2D,
+//                                       0.1,
+//                                       fractureMesh);
 
 
     // Export the block mesh
 
-    meshUtilities.ExportMeshToVTU(fractureMesh,
-                                  exportVtuFolder,
-                                  "Fracture_Mesh");
+//    meshUtilities.ExportMeshToVTU(fractureMesh,
+//                                  exportVtuFolder,
+//                                  "Fracture_Mesh");
 
-    Gedim::Output::PrintStatusProgram("Create Fracture Mesh");
+//    Gedim::Output::PrintStatusProgram("Create Fracture Mesh");
 
     Gedim::Output::PrintGenericMessage("Compute block geometric properties...", true);
 
@@ -387,17 +391,22 @@ bool EllipticProblem::FractureItersectsElement(Fracture3D *fracture,
 
 // *************************************************************************** Class Fracture3D
 
-Fracture3D::Fracture3D(Eigen::MatrixXd pol,
-                       Eigen::Vector3d norm,
-                       Eigen::Vector3d transl,
-                       Eigen::Matrix3d rot)
+
+EllipticProblem::Fracture3D::Fracture3D(Vector3d p1, Vector3d p2, Vector3d p3, Gedim::GeometryUtilities geometryUtilities)
 {
-    this->polygon     = pol;
-    this->normal      = norm;
-    this->translation = transl;
-    this->rotation    = rot;
+    this->polygon = geometryUtilities.CreateParallelogram(p1, p2, p3);
+    this->normal = geometryUtilities.PolygonNormal(this->polygon);
+    this->translation = geometryUtilities.PolygonTranslation(this->polygon);
+    this->rotation = geometryUtilities.PolygonRotationMatrix(this->polygon,
+                                                             this->normal,
+                                                             this->translation);
+
+    MatrixXd fracture2D = geometryUtilities.RotatePointsFrom3DTo2D(this->polygon,
+                                                                   this->rotation.transpose(),
+                                                                   this->translation);
 
 }
+
 
 
 }
