@@ -50,7 +50,7 @@ list(APPEND ${XFEM_3D_INCLUDE} ${xfem_3d_includes})
 # Create library test executable
 ###############################################################################################
 add_executable(${PROJECT_NAME}
-	main.cpp
+        main.cpp
 	${${XFEM_3D_SOURCES}}
     ${${XFEM_3D_HEADERS}})
 

@@ -1,4 +1,6 @@
 #include "EllipticProblem.hpp"
+#include "Fracture3D.hpp"
+
 
 #include "Configurations.hpp"
 #include "MeshMatrices.hpp"
@@ -12,6 +14,7 @@
 
 using namespace std;
 using namespace Eigen;
+using namespace GeometricWrappers;
 
 namespace XFEM_3D
 {
@@ -125,13 +128,13 @@ void EllipticProblem::Run()
                                         config.MeshMaximumTetrahedronVolume(),
                                         blockMesh);
 
-
     // Export the block mesh
     meshUtilities.ExportMeshToVTU(blockMesh,
                                   exportVtuFolder,
                                   "Block_Mesh");
 
     Gedim::Output::PrintStatusProgram("Create Block Mesh");
+
 
     // Create mesh for every 2D fracture in fractureNetwork2D
 
@@ -163,33 +166,36 @@ void EllipticProblem::Run()
 
 
     // Determine the effective number of DOFs (enrichment included).
-    // Construction of boolean matrices
     double numDofs = blockMeshData.NumberCell0D; // Not so true: Dirichlet conditions?
 
-    Gedim::Eigen_SparseArray<> toEnrich_elements;
-    Gedim::Eigen_SparseArray<> toenrich_nodes;
+    // Construction of boolean matrices
+    SparseMatrix<unsigned int> toEnrich_elements(blockMesh.Cell3DTotalNumber(), num_fractures);
+    SparseMatrix<unsigned int> toEnrich_nodes(blockMeshData.NumberCell0D, num_fractures);
 
-    toEnrich_elements.Create();
-    toenrich_nodes.Create();
-
-    toEnrich_elements.SetSize(blockMesh.Cell3DTotalNumber(), num_fractures);
-    toenrich_nodes.SetSize(blockMeshData.NumberCell0D, num_fractures);
-
+    // Filling up the boolean matrices
     for (unsigned int e = 0; e < blockMesh.Cell3DTotalNumber(); e++)
     {
         const Gedim::GeometryUtilities::Polyhedron element = meshUtilities.MeshCell3DToPolyhedron(blockMesh, e);
 
         for (unsigned int f = 0; f < num_fractures; f++)
         {
-            if (FractureItersectsElement(fractureNetwork.at(f), element))
+            if (fractureNetwork.at(f)->intersects(element))
             {
                 // Set (e,f) entry of matrix to true, meaning element e is to enrich wrt fracture f.
-                toEnrich_elements.Triplet(e, f, 1);
+                toEnrich_elements.insert(e, f) = 1;
 
-                // Retrieve the global Id of the verteces of element -> possible?
+                // Retrieve the global Id of the verteces of element
+                unsigned int idNodo1, idNodo2, idNodo3, idNodo4, num_cells = blockMeshData.NumberCell3D;
 
+                idNodo1 = blockMeshData.Cell3DVertices.at(e              );
+                idNodo2 = blockMeshData.Cell3DVertices.at(e +   num_cells);
+                idNodo3 = blockMeshData.Cell3DVertices.at(e + 2*num_cells);
+                idNodo4 = blockMeshData.Cell3DVertices.at(e + 3*num_cells);
 
-
+                toEnrich_nodes.coeffRef(idNodo1, f) = 1;
+                toEnrich_nodes.coeffRef(idNodo2, f) = 1;
+                toEnrich_nodes.coeffRef(idNodo3, f) = 1;
+                toEnrich_nodes.coeffRef(idNodo4, f) = 1;
 
                 // Export reproducing element to Paraview for visualization
                 {
@@ -234,29 +240,12 @@ void EllipticProblem::Run()
                                         ".vtu");
                 }
             }
-
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    // Computing the number of DOFS
+    unsigned int numEnrichements = toEnrich_nodes.nonZeros();
+    numDofs += numEnrichements;
 
 
 
@@ -268,7 +257,7 @@ void EllipticProblem::Run()
         const Gedim::GeometryUtilities::Polyhedron cellToPolyhedron = meshUtilities.MeshCell3DToPolyhedron(blockMesh,
                                                                                                            c);
 
-//        {
+        {
 //            const vector<double> cellVolume(1, meshGeometricData.Cell3DsVolumes[c]);
 //            Gedim::VTKUtilities vtkUtilities;
 //            vtkUtilities.AddPolyhedron(cellToPolyhedron.Vertices,
@@ -286,7 +275,7 @@ void EllipticProblem::Run()
 //                                "/Cell_" +
 //                                to_string(c) +
 //                                ".vtu");
-//        }
+        }
 
     }
 
@@ -352,61 +341,5 @@ void EllipticProblem::Run()
 
     Gedim::Output::PrintStatusProgram("Solve");
 }
-
-
-bool EllipticProblem::FractureItersectsElement(Fracture3D *fracture,
-                                               Gedim::GeometryUtilities::Polyhedron element)
-{
-
-    Vector3d normal = fracture->getNormal();
-    Vector3d x = fracture->getOrigin();
-    double a = normal(0);
-    double b = normal(1);
-    double c = normal(2);
-    double d = -a*x(0) - b*x(1) - c*x(2);
-    vector<double> signed_distances;
-
-    for (unsigned int i = 0; i <= 3; i++)
-    {
-        double sdf;
-        Vector3d p = element.Vertices(seq(0,2), i);
-        sdf = (a*p(0) + b*p(1) + c*p(2) + d) / (sqrt(a*a + b*b + c*c));
-        signed_distances.push_back(sdf);
-    }
-
-    double max_sd = *max_element(signed_distances.begin(),
-                                 signed_distances.end());
-    double min_sd = *min_element(signed_distances.begin(),
-                                 signed_distances.end());
-
-    if (max_sd * min_sd < 0)
-    {
-        // element is cut by the fracture
-        return true;
-    }
-
-    return false;
-
-}
-
-// *************************************************************************** Class Fracture3D
-
-
-EllipticProblem::Fracture3D::Fracture3D(Vector3d p1, Vector3d p2, Vector3d p3, Gedim::GeometryUtilities geometryUtilities)
-{
-    this->polygon = geometryUtilities.CreateParallelogram(p1, p2, p3);
-    this->normal = geometryUtilities.PolygonNormal(this->polygon);
-    this->translation = geometryUtilities.PolygonTranslation(this->polygon);
-    this->rotation = geometryUtilities.PolygonRotationMatrix(this->polygon,
-                                                             this->normal,
-                                                             this->translation);
-
-    MatrixXd fracture2D = geometryUtilities.RotatePointsFrom3DTo2D(this->polygon,
-                                                                   this->rotation.transpose(),
-                                                                   this->translation);
-
-}
-
-
 
 }
