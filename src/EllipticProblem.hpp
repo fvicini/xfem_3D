@@ -3,6 +3,8 @@
 
 #include "Configurations.hpp"
 
+#include "GeometryUtilities.hpp"
+
 #include <string>
 
 namespace XFEM_3D
@@ -28,6 +30,8 @@ namespace XFEM_3D
   {
     private:
       const EllipticProblem_ProgramConfiguration& config;
+
+      void TestQuadrature(const Gedim::GeometryUtilities& geometryUtilities) const;
 
     public:
       EllipticProblem(const EllipticProblem_ProgramConfiguration& config);

@@ -3,8 +3,9 @@
 
 #endif // FRACTURE3D_HPP
 #include "GeometryUtilities.hpp"
+#pragma once
 
-namespace GeometricWrappers {
+namespace XFEM_3D {
 
 class Fracture3D
 {
@@ -17,8 +18,8 @@ class Fracture3D
 
   // Methods
   public:
-    Fracture3D();
-    ~Fracture3D();
+    Fracture3D() {};
+    ~Fracture3D() {};
     Fracture3D(Eigen::Vector3d, Eigen::Vector3d, Eigen::Vector3d, Gedim::GeometryUtilities);
 
     inline Eigen::MatrixXd getPolygon()     { return this->polygon; }

@@ -4,7 +4,7 @@
 
 using namespace Eigen;
 
-namespace GeometricWrappers {
+namespace XFEM_3D {
 
 
 Fracture3D::Fracture3D(Vector3d p1, Vector3d p2, Vector3d p3, Gedim::GeometryUtilities geometryUtilities)
