@@ -17,11 +17,17 @@ namespace Utilities
     ///          phi(x,y,z) = Ax + By + Cz + D
     /// The coeff vector returned by this function is to be given as second input to evaluateLagrange, evaluateLagrangeGrad for evaluating the correct basis
     /// function when integrating.
-    Eigen::Vector4d lagrangeBasisCoeff(Eigen::Vector3d nodeCoordinates, Gedim::GeometryUtilities::Polyhedron element);
+    Eigen::Vector4d lagrangeBasisCoeff3D(Eigen::Vector3d nodeCoordinates, Gedim::GeometryUtilities::Polyhedron element);
 
-    double evaluateLagrange(Eigen::Vector3d x, Eigen::Vector4d coeff);
+    Eigen::Vector3d lagrangeBasisCoeff2D(Eigen::Vector3d nodeCoordinates, Eigen::MatrixXd elementPoints);
 
-    Eigen::Vector3d evaluateLagrangeGrad(Eigen::Vector3d x, Eigen::Vector4d coeff);
+    double evaluate3DLagrange(Eigen::Vector3d x, Eigen::Vector4d coeff);
+
+    Eigen::Vector3d evaluate3DLagrangeGrad(Eigen::Vector3d x, Eigen::Vector4d coeff);
+
+    double evaluate2DLagrange(Eigen::Vector3d x, Eigen::Vector3d coeff);
+
+    Eigen::Vector2d evaluate2DLagrangeGrad(Eigen::Vector3d x, Eigen::Vector3d coeff);
 
 
 }

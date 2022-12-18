@@ -1,6 +1,8 @@
 #include "P1MatrixAssembler.hpp"
 #include "Quadrature_Gauss3D_Tetrahedron.hpp"
+#include "Quadrature_Gauss2D_Triangle.hpp"
 #include "MapTetrahedron.hpp"
+#include "MapTriangle.hpp"
 #include "Utilities.hpp"
 
 namespace XFEM_3D
@@ -85,7 +87,13 @@ void P1MatrixAssembler::setLambdaF_Pivot(Eigen::VectorXi *newLambdaF_Pivot)
 }
 
 
+void P1MatrixAssembler::setPhysicalParameters(PhysicalParameters *newPhysicalParameters)
+{
+    physicalParameters = newPhysicalParameters;
+}
+
 // *****************************************************************************************************
+
 
 void P1MatrixAssembler::assemble_AhD(Gedim::Eigen_SparseArray<>& AhD,
                        Gedim::Eigen_SparseArray<>& AhD_dirich,
@@ -262,10 +270,10 @@ void P1MatrixAssembler::constructElement_AhD(Gedim::Eigen_SparseArray<>& M,
     const Gedim::GeometryUtilities::Polyhedron element = meshUtilities->MeshCell3DToPolyhedron(mesh, elementIndex);
 
     // Identification of the current test (i-th) basis function
-    Eigen::Vector4d testLagrangeCoeff = Utilities::lagrangeBasisCoeff(mesh.Cell0DCoordinates(row), element);
+    Eigen::Vector4d testLagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(row), element);
 
     // Identification of the current trial (j-th) basis function
-    Eigen::Vector4d trialLagrangeCoeff = Utilities::lagrangeBasisCoeff(mesh.Cell0DCoordinates(col), element);
+    Eigen::Vector4d trialLagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(col), element);
 
     // Identification of "test node"'s coordinates
     Eigen::Vector3d x_jCoord = mesh.Cell0DCoordinates(row);
@@ -307,11 +315,14 @@ void P1MatrixAssembler::constructElement_AhD(Gedim::Eigen_SparseArray<>& M,
 
         double integralValue = 0.0;
 
-        Eigen::Vector3d GradPhi_i = Utilities::evaluateLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
-        Eigen::Vector3d GradPhi_j = Utilities::evaluateLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
+        Eigen::Vector3d GradPhi_i = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
+        Eigen::Vector3d GradPhi_j = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
+
+        double scalarProduct = (this->physicalParameters->getPermeabilityTensorVolume() * GradPhi_i).transpose() * GradPhi_j;
+
         for (unsigned int q = 0; q < mappedPoints.size(); q++)
         {
-            integralValue += mappedWeights(q) * GradPhi_i.transpose() * GradPhi_j;
+            integralValue += mappedWeights(q) * scalarProduct;
         }
 
         break;
@@ -343,9 +354,9 @@ void P1MatrixAssembler::constructElement_AhD(Gedim::Eigen_SparseArray<>& M,
 
         // Computing the integral
 
-        Eigen::Vector3d GradPhi_i = Utilities::evaluateLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
-        Eigen::Vector3d GradPhi_j = Utilities::evaluateLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
-        double scalarProduct = GradPhi_j.transpose() * GradPhi_i;
+        Eigen::Vector3d GradPhi_i = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
+        Eigen::Vector3d GradPhi_j = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
+        double scalarProduct = (this->physicalParameters->getPermeabilityTensorVolume() * GradPhi_j).transpose() * GradPhi_i;
 
         double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(x_iCoord, *fracture));
 
@@ -384,9 +395,9 @@ void P1MatrixAssembler::constructElement_AhD(Gedim::Eigen_SparseArray<>& M,
 
         // Computing the integral
 
-        Eigen::Vector3d GradPhi_i = Utilities::evaluateLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
-        Eigen::Vector3d GradPhi_j = Utilities::evaluateLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
-        double scalarProduct = GradPhi_j.transpose() * GradPhi_i;
+        Eigen::Vector3d GradPhi_i = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
+        Eigen::Vector3d GradPhi_j = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
+        double scalarProduct = (this->physicalParameters->getPermeabilityTensorVolume() * GradPhi_j).transpose() * GradPhi_i;
 
         double Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(x_jCoord, *fracture));
 
@@ -496,9 +507,9 @@ void P1MatrixAssembler::constructElement_AhD(Gedim::Eigen_SparseArray<>& M,
             Eigen::VectorXd mappedWeights = quadratureWeightsRef.array() * mapping.DetJ(mapData,
                                                                                   quadraturePointsRef).array().abs();
 
-            Eigen::Vector3d GradPhi_i = Utilities::evaluateLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
-            Eigen::Vector3d GradPhi_j = Utilities::evaluateLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
-            double scalarProduct = GradPhi_j.transpose() * GradPhi_i;
+            Eigen::Vector3d GradPhi_i = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
+            Eigen::Vector3d GradPhi_j = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
+            double scalarProduct = (this->physicalParameters->getPermeabilityTensorVolume() * GradPhi_j).transpose() * GradPhi_i;
 
             double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(x_iCoord, *fracture));
             double Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(x_jCoord, *fracture));
@@ -524,6 +535,111 @@ void P1MatrixAssembler::constructElement_AhD(Gedim::Eigen_SparseArray<>& M,
     M.Triplet(row, col, integralValue);
 
 }
+
+
+void P1MatrixAssembler::assemble_AhF(Gedim::Eigen_SparseArray<>& AhF,
+                       Gedim::Eigen_SparseArray<>& AhF_dirich,
+                       Gedim::Eigen_Array<>& rightHandSide)
+{
+    Gedim::MeshMatricesDAO mesh = *this->hF_Mesh;
+    Eigen::VectorXi pivot = *this->hF_Pivot;
+
+    for (unsigned int e = 0; e < mesh.Cell2DTotalNumber(); e++)
+    {
+        for (unsigned short int i = 0; i < 2; i++)
+        {
+            unsigned int ii = pivot[mesh.Cell2DVertex(e, i)];
+
+            if (ii > 0)
+            {
+                for (unsigned short int j = 0; j < 2; j++)
+                {
+                    unsigned int jj = pivot[mesh.Cell2DVertex(e, j)];
+
+                    if (jj > 0)
+
+                        this->constructElement_AhF(AhF, ii, jj, e);
+                    else
+
+                        this->constructElement_AhF(AhF_dirich, ii, -jj, e);
+
+                }
+            }
+        }
+    }
+}
+
+
+
+void P1MatrixAssembler::constructElement_AhF(Gedim::Eigen_SparseArray<>& M,
+                 const unsigned int row,
+                 const unsigned int col,
+                 const unsigned int elementIndex)
+{
+    // We are assembling the A^hF matrix, therefore we use the mesh for the hF variable.
+    Gedim::MeshMatricesDAO mesh = *this->hF_Mesh;
+
+    // Identification of the current triangle as a vector of point global Ids. Retrieval of their coordinates.
+    vector<unsigned int> elementPointsIds = mesh.Cell2DVertices(elementIndex);
+    Eigen::MatrixXd elementPointsCoords;
+    for (unsigned int k = 0; k < elementPointsIds.size(); k++)
+    {
+        elementPointsCoords.col(k) = mesh.Cell0DCoordinates(elementPointsIds.at(k));
+    }
+
+    // Identification of the current test (i-th) basis function
+    Eigen::Vector3d testLagrangeCoeff = Utilities::lagrangeBasisCoeff2D(mesh.Cell0DCoordinates(row), elementPointsCoords);
+
+    // Identification of the current trial (j-th) basis function
+    Eigen::Vector3d trialLagrangeCoeff = Utilities::lagrangeBasisCoeff2D(mesh.Cell0DCoordinates(row), elementPointsCoords);
+
+    // Identification of "test node"'s coordinates
+    Eigen::Vector3d x_jCoord = mesh.Cell0DCoordinates(row);
+
+    // Identification of "trial node"'s coordinates
+    Eigen::Vector3d x_iCoord = mesh.Cell0DCoordinates(col);
+
+    // Integration
+    // Preparation of the quadrature formula
+
+    const unsigned int quadratureOrder = 1;
+    Eigen::MatrixXd quadraturePointsRef;
+    Eigen::VectorXd quadratureWeightsRef;
+    Gedim::Quadrature_Gauss2D_Triangle::FillPointsAndWeights(quadratureOrder,
+                                                             quadraturePointsRef,
+                                                             quadratureWeightsRef);
+
+
+    Gedim::MapTriangle mapping;
+
+    // Mapping the reference quadrature nodes and weights on the tetrahedron
+
+    const Gedim::MapTriangle::MapTriangleData mapData = mapping.Compute(elementPointsCoords);
+
+    Eigen::MatrixXd mappedPoints = mapping.F(mapData,
+                                             quadraturePointsRef);
+
+    Eigen::VectorXd mappedWeights = quadratureWeightsRef.array() * mapping.DetJ(mapData,
+                                                                                quadraturePointsRef).array().abs();
+
+    // Computing the integral
+    double integralValue = 0.0;
+
+    Eigen::Vector2d GradPhi_i = Utilities::evaluate2DLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
+    Eigen::Vector2d GradPhi_j = Utilities::evaluate2DLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
+    double scalarProduct = (this->physicalParameters->getPermeabilityTensorFracture() * GradPhi_j).transpose() * GradPhi_i;
+
+    for (unsigned int q = 0; q < mappedPoints.size(); q++)
+    {
+        double Phi_i_q = Utilities::evaluate2DLagrange(mappedPoints.col(q), testLagrangeCoeff);
+        double Phi_j_q = Utilities::evaluate2DLagrange(mappedPoints.col(q), trialLagrangeCoeff);
+
+        integralValue += mappedWeights(q) * (scalarProduct)
+                + mappedWeights(q) * 2 * this->physicalParameters->getNormalTransmissivityFracture() * Phi_i_q * Phi_j_q;
+
+    }
+}
+
 
 
 

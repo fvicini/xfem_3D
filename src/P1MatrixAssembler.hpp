@@ -7,6 +7,7 @@
 #include "GeometryUtilities.hpp"
 #include "MeshUtilities.hpp"
 #include "Fracture3D.hpp"
+#include "PhysicalParameters.hpp"
 
 namespace XFEM_3D
 {
@@ -57,6 +58,9 @@ private:
     // Fracture
     Fracture3D* fracture;
 
+    // Physical parameters (permeabilities and normal trasmissivity of fracture)
+    PhysicalParameters* physicalParameters;
+
     // Other utilities objects
     Gedim::GeometryUtilities* geometryUtilities;
     Gedim::MeshUtilities* meshUtilities;
@@ -80,6 +84,10 @@ public:
                             Gedim::Eigen_SparseArray<>& AhD_dirich,
                             Gedim::Eigen_Array<>& rightHandSide);
 
+     void assemble_AhF(Gedim::Eigen_SparseArray<>& AhF,
+                            Gedim::Eigen_SparseArray<>& AhF_dirich,
+                            Gedim::Eigen_Array<>& rightHandSide);
+
      void setHD_Mesh(Gedim::MeshMatricesDAO *newHD_Mesh);
      void setHD_Pivot(Eigen::VectorXi *newHD_Pivot);
      void setToEnrich_nodes(Eigen::SparseMatrix<unsigned int> *newToEnrich_nodes);
@@ -95,6 +103,7 @@ public:
      void setLambdaD_Pivot(Eigen::VectorXi *newLambdaD_Pivot);
      void setLambdaF_Mesh(Gedim::MeshMatricesDAO *newLambdaF_Mesh);
      void setLambdaF_Pivot(Eigen::VectorXi *newLambdaF_Pivot);
+     void setPhysicalParameters(PhysicalParameters *newPhysicalParameters);
 
 private:
 
@@ -103,6 +112,12 @@ private:
                      const unsigned int j,
                      const unsigned int elementIndex,
                      const integrationType type);
+
+    void constructElement_AhF(Gedim::Eigen_SparseArray<>& M,
+                     const unsigned int i,
+                     const unsigned int j,
+                     const unsigned int elementIndex);
+
 
 
 

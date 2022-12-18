@@ -233,15 +233,14 @@ void EllipticProblem::Run()
 
 
     // Create mesh for every 2D fracture in fractureNetwork2D
+    Gedim::Output::PrintGenericMessage("Create Fracture Mesh...", true);
 
-        Gedim::Output::PrintGenericMessage("Create Fracture Mesh...", true);
+    Gedim::MeshMatrices fractureMeshData;
+    Gedim::MeshMatricesDAO fractureMesh(fractureMeshData);
 
-        Gedim::MeshMatrices fractureMeshData;
-        Gedim::MeshMatricesDAO fractureMesh(fractureMeshData);
-
-        meshUtilities.CreateTriangularMesh(fractureNetwork2D.at(0),
-                                           0.1,
-                                           fractureMesh);
+    meshUtilities.CreateTriangularMesh(fractureNetwork2D.at(0),
+                                        0.1,
+                                        fractureMesh);
 
 
     // Export the block mesh
