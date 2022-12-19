@@ -29,7 +29,13 @@ private:
     // Mesh and pivot vector for the h^D variable
     Gedim::MeshMatricesDAO* hD_Mesh;
     Eigen::VectorXi* hD_Pivot;
+
+    // Addtional boolean matrices for the enrichments and 2D/3D coupling
     Eigen::SparseMatrix<unsigned int>* toEnrich_nodes;
+    Eigen::SparseMatrix<unsigned int>* toEnrich_elements;
+    Eigen::SparseMatrix<unsigned int>* hD_PsiP_MeshIntersections;
+    Eigen::SparseMatrix<unsigned int>* hD_PsiM_MeshIntersections;
+    Eigen::SparseMatrix<unsigned int>* hD_PsiF_MeshIntersections;
 
     // Mesh and pivot vector for the h^F variable
     Gedim::MeshMatricesDAO* hF_Mesh;
@@ -70,15 +76,9 @@ private:
 
 public:
 
-    inline P1MatrixAssembler(Fracture3D* fracture,
-                             Gedim::GeometryUtilities* geometryUtilities,
-                             Gedim::MeshUtilities* meshutilities) {
-
-        this->fracture = fracture;
-        this->geometryUtilities = geometryUtilities;
-        this->meshUtilities = meshutilities;
-    };
-
+    P1MatrixAssembler(Fracture3D* fracture,
+                        Gedim::GeometryUtilities* geometryUtilities,
+                        Gedim::MeshUtilities* meshutilities);
 
      void assemble_AhD(Gedim::Eigen_SparseArray<>& AhD,
                             Gedim::Eigen_SparseArray<>& AhD_dirich,
@@ -91,6 +91,7 @@ public:
      void setHD_Mesh(Gedim::MeshMatricesDAO *newHD_Mesh);
      void setHD_Pivot(Eigen::VectorXi *newHD_Pivot);
      void setToEnrich_nodes(Eigen::SparseMatrix<unsigned int> *newToEnrich_nodes);
+     void setToEnrich_elements(Eigen::SparseMatrix<unsigned int> *newToEnrich_elements);
      void setHF_Mesh(Gedim::MeshMatricesDAO *newHF_Mesh);
      void setHF_Pivot(Eigen::VectorXi *newHF_Pivot);
      void setPsiP_Mesh(Gedim::MeshMatricesDAO *newPsiP_Mesh);
@@ -104,6 +105,9 @@ public:
      void setLambdaF_Mesh(Gedim::MeshMatricesDAO *newLambdaF_Mesh);
      void setLambdaF_Pivot(Eigen::VectorXi *newLambdaF_Pivot);
      void setPhysicalParameters(PhysicalParameters *newPhysicalParameters);
+
+     // Construction of _2D_3D_intersections.
+     void initialize_2D_3DCoupling();
 
 private:
 

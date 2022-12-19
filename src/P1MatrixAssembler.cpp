@@ -8,6 +8,236 @@
 namespace XFEM_3D
 {
 
+// CONSTRUCTOR ***************************************************************************************************
+
+P1MatrixAssembler::P1MatrixAssembler(Fracture3D* fracture,
+                             Gedim::GeometryUtilities* geometryUtilities,
+                             Gedim::MeshUtilities* meshutilities) {
+
+        this->fracture = fracture;
+        this->geometryUtilities = geometryUtilities;
+        this->meshUtilities = meshutilities;
+
+    }
+
+// 2D, 3D coupling ************************************************************************************************
+
+void P1MatrixAssembler::initialize_2D_3DCoupling()
+{
+    // This method has to be called after setting all the meshes.
+    bool incompleteSettings = (this->hD_Mesh == NULL) || (this->hF_Mesh == NULL)
+            || (this->psiF_Mesh == NULL) || (this->psiM_Mesh == NULL)
+            || (this->psiP_Mesh == NULL) || (this->lambdaD_Mesh == NULL)
+            || (this->lambdaF_Mesh == NULL);
+
+    if (incompleteSettings)
+    {
+        cerr << "Error: you have to set some meshes before initializing their coupling!";
+        return;
+    }
+
+
+    // ========================== 1 ==============================================================================================
+
+    // Coupling of meshes for hD, Psi+
+    Gedim::MeshMatricesDAO* mesh3D = this->hD_Mesh;
+    Gedim::MeshMatricesDAO* mesh2D = this->psiP_Mesh;
+
+    for (unsigned int e = 0; e < mesh3D->Cell3DTotalNumber(); e++)
+    {
+        if (!this->toEnrich_elements->coeff(e, 0))
+            continue;
+
+        // First column is global index in the mesh3D of the current element.
+        this->hD_PsiP_MeshIntersections->coeffRef(e, 0) = e;
+
+        // Auxiliary geometric variables
+        Gedim::GeometryUtilities::Polyhedron elementAsPolyhedron = meshUtilities->MeshCell3DToPolyhedron(*mesh3D, e);
+        std::vector<Eigen::MatrixXd>  polyhedronFaceVertices = geometryUtilities->PolyhedronFaceVertices(elementAsPolyhedron.Vertices,
+                                                                                                         elementAsPolyhedron.Faces);
+        std::vector<Eigen::Vector3d> polyhedronFaceTranslations = geometryUtilities->PolyhedronFaceTranslations(polyhedronFaceVertices);
+        std::vector<Eigen::Vector3d> polyhedronFaceNormals = geometryUtilities->PolyhedronFaceNormals(polyhedronFaceVertices);
+        std::vector<Eigen::Matrix3d> polyhedronFaceRotationMatrices = geometryUtilities->PolyhedronFaceRotationMatrices(polyhedronFaceVertices,
+                                                                                                                        polyhedronFaceNormals,
+                                                                                                                        polyhedronFaceTranslations);
+        std::vector<Eigen::MatrixXd> polyhedronFaceRotatedVertices = geometryUtilities->PolyhedronFaceRotatedVertices(polyhedronFaceVertices,
+                                                                                                                      polyhedronFaceTranslations,
+                                                                                                                      polyhedronFaceRotationMatrices);
+        Eigen::Vector3d pointInsidePolyhedron = geometryUtilities->PolyhedronBarycenter(elementAsPolyhedron.Vertices);
+        std::vector<bool> polyhedronFaceNormalDirections = geometryUtilities->PolyhedronFaceNormalDirections(polyhedronFaceVertices,
+                                                                                                             pointInsidePolyhedron,
+                                                                                                             polyhedronFaceNormals);
+
+
+        // Cycle on 2D mesh and find which elements are intersected
+        // It is enough to find a node of the 2D element lying inside of the current 3D element
+        for (unsigned int t = 0; t < mesh2D->Cell2DTotalNumber(); t++)
+        {
+            // Identification of the current triangle as a vector of point global Ids.
+            vector<unsigned int> elementPointsIds = mesh2D->Cell2DVertices(t);
+
+            // Checking whether the triangle is intersected by the current 3D element.
+            for (unsigned int k = 0; k < elementPointsIds.size(); k++)
+            {
+
+                Gedim::GeometryUtilities::PointPolyhedronPositionResult result = geometryUtilities->PointPolyhedronPosition(mesh2D->Cell0DCoordinates(elementPointsIds.at(k)),
+                                                                                                                            elementAsPolyhedron.Faces,
+                                                                                                                            polyhedronFaceVertices,
+                                                                                                                            polyhedronFaceRotatedVertices,
+                                                                                                                            polyhedronFaceNormals,
+                                                                                                                            polyhedronFaceNormalDirections,
+                                                                                                                            polyhedronFaceTranslations,
+                                                                                                                            polyhedronFaceRotationMatrices);
+
+                if (result.Type == Gedim::GeometryUtilities::PointPolyhedronPositionResult::Types::Inside)
+                {
+                    // The triangle is chosen
+                    this->hD_PsiP_MeshIntersections->coeffRef(e, t+1) = 1;
+                }
+            }
+
+        }
+    }
+
+    // ========================== (1) ============================================================================================
+
+
+
+    // ========================== 2 ==============================================================================================
+
+    // Coupling of meshes for hD, Psi-
+    mesh3D = this->hD_Mesh;
+    mesh2D = this->psiM_Mesh;
+
+    for (unsigned int e = 0; e < mesh3D->Cell3DTotalNumber(); e++)
+    {
+        if (!this->toEnrich_elements->coeff(e, 0))
+            continue;
+
+        // First column is global index in the mesh3D of the current element.
+        this->hD_PsiP_MeshIntersections->coeffRef(e, 0) = e;
+
+        // Auxiliary geometric variables
+        Gedim::GeometryUtilities::Polyhedron elementAsPolyhedron = meshUtilities->MeshCell3DToPolyhedron(*mesh3D, e);
+        std::vector<Eigen::MatrixXd>  polyhedronFaceVertices = geometryUtilities->PolyhedronFaceVertices(elementAsPolyhedron.Vertices,
+                                                                                                         elementAsPolyhedron.Faces);
+        std::vector<Eigen::Vector3d> polyhedronFaceTranslations = geometryUtilities->PolyhedronFaceTranslations(polyhedronFaceVertices);
+        std::vector<Eigen::Vector3d> polyhedronFaceNormals = geometryUtilities->PolyhedronFaceNormals(polyhedronFaceVertices);
+        std::vector<Eigen::Matrix3d> polyhedronFaceRotationMatrices = geometryUtilities->PolyhedronFaceRotationMatrices(polyhedronFaceVertices,
+                                                                                                                        polyhedronFaceNormals,
+                                                                                                                        polyhedronFaceTranslations);
+        std::vector<Eigen::MatrixXd> polyhedronFaceRotatedVertices = geometryUtilities->PolyhedronFaceRotatedVertices(polyhedronFaceVertices,
+                                                                                                                      polyhedronFaceTranslations,
+                                                                                                                      polyhedronFaceRotationMatrices);
+        Eigen::Vector3d pointInsidePolyhedron = geometryUtilities->PolyhedronBarycenter(elementAsPolyhedron.Vertices);
+        std::vector<bool> polyhedronFaceNormalDirections = geometryUtilities->PolyhedronFaceNormalDirections(polyhedronFaceVertices,
+                                                                                                             pointInsidePolyhedron,
+                                                                                                             polyhedronFaceNormals);
+
+
+        // Cycle on 2D mesh and find which elements are intersected
+        // It is enough to find a node of the 2D element lying inside of the current 3D element
+        for (unsigned int t = 0; t < mesh2D->Cell2DTotalNumber(); t++)
+        {
+            // Identification of the current triangle as a vector of point global Ids.
+            vector<unsigned int> elementPointsIds = mesh2D->Cell2DVertices(t);
+
+            // Checking whether the triangle is intersected by the current 3D element.
+            for (unsigned int k = 0; k < elementPointsIds.size(); k++)
+            {
+
+                Gedim::GeometryUtilities::PointPolyhedronPositionResult result = geometryUtilities->PointPolyhedronPosition(mesh2D->Cell0DCoordinates(elementPointsIds.at(k)),
+                                                                                                                            elementAsPolyhedron.Faces,
+                                                                                                                            polyhedronFaceVertices,
+                                                                                                                            polyhedronFaceRotatedVertices,
+                                                                                                                            polyhedronFaceNormals,
+                                                                                                                            polyhedronFaceNormalDirections,
+                                                                                                                            polyhedronFaceTranslations,
+                                                                                                                            polyhedronFaceRotationMatrices);
+
+                if (result.Type == Gedim::GeometryUtilities::PointPolyhedronPositionResult::Types::Inside)
+                {
+                    // The triangle is chosen
+                    this->hD_PsiM_MeshIntersections->coeffRef(e, t+1) = 1;
+                }
+            }
+
+        }
+    }
+
+    // ========================== (2) ============================================================================================
+
+
+
+    // ========================== 3 ==============================================================================================
+
+    // Coupling of meshes for hD, Psi-
+    mesh3D = this->hD_Mesh;
+    mesh2D = this->psiF_Mesh;
+
+    for (unsigned int e = 0; e < mesh3D->Cell3DTotalNumber(); e++)
+    {
+        if (!this->toEnrich_elements->coeff(e, 0))
+            continue;
+
+        // First column is global index in the mesh3D of the current element.
+        this->hD_PsiP_MeshIntersections->coeffRef(e, 0) = e;
+
+        // Auxiliary geometric variables
+        Gedim::GeometryUtilities::Polyhedron elementAsPolyhedron = meshUtilities->MeshCell3DToPolyhedron(*mesh3D, e);
+        std::vector<Eigen::MatrixXd>  polyhedronFaceVertices = geometryUtilities->PolyhedronFaceVertices(elementAsPolyhedron.Vertices,
+                                                                                                         elementAsPolyhedron.Faces);
+        std::vector<Eigen::Vector3d> polyhedronFaceTranslations = geometryUtilities->PolyhedronFaceTranslations(polyhedronFaceVertices);
+        std::vector<Eigen::Vector3d> polyhedronFaceNormals = geometryUtilities->PolyhedronFaceNormals(polyhedronFaceVertices);
+        std::vector<Eigen::Matrix3d> polyhedronFaceRotationMatrices = geometryUtilities->PolyhedronFaceRotationMatrices(polyhedronFaceVertices,
+                                                                                                                        polyhedronFaceNormals,
+                                                                                                                        polyhedronFaceTranslations);
+        std::vector<Eigen::MatrixXd> polyhedronFaceRotatedVertices = geometryUtilities->PolyhedronFaceRotatedVertices(polyhedronFaceVertices,
+                                                                                                                      polyhedronFaceTranslations,
+                                                                                                                      polyhedronFaceRotationMatrices);
+        Eigen::Vector3d pointInsidePolyhedron = geometryUtilities->PolyhedronBarycenter(elementAsPolyhedron.Vertices);
+        std::vector<bool> polyhedronFaceNormalDirections = geometryUtilities->PolyhedronFaceNormalDirections(polyhedronFaceVertices,
+                                                                                                             pointInsidePolyhedron,
+                                                                                                             polyhedronFaceNormals);
+
+
+        // Cycle on 2D mesh and find which elements are intersected
+        // It is enough to find a node of the 2D element lying inside of the current 3D element
+        for (unsigned int t = 0; t < mesh2D->Cell2DTotalNumber(); t++)
+        {
+            // Identification of the current triangle as a vector of point global Ids.
+            vector<unsigned int> elementPointsIds = mesh2D->Cell2DVertices(t);
+
+            // Checking whether the triangle is intersected by the current 3D element.
+            for (unsigned int k = 0; k < elementPointsIds.size(); k++)
+            {
+
+                Gedim::GeometryUtilities::PointPolyhedronPositionResult result = geometryUtilities->PointPolyhedronPosition(mesh2D->Cell0DCoordinates(elementPointsIds.at(k)),
+                                                                                                                            elementAsPolyhedron.Faces,
+                                                                                                                            polyhedronFaceVertices,
+                                                                                                                            polyhedronFaceRotatedVertices,
+                                                                                                                            polyhedronFaceNormals,
+                                                                                                                            polyhedronFaceNormalDirections,
+                                                                                                                            polyhedronFaceTranslations,
+                                                                                                                            polyhedronFaceRotationMatrices);
+
+                if (result.Type == Gedim::GeometryUtilities::PointPolyhedronPositionResult::Types::Inside)
+                {
+                    // The triangle is chosen
+                    this->hD_PsiM_MeshIntersections->coeffRef(e, t+1) = 1;
+                }
+            }
+
+        }
+    }
+
+    // ========================== (3) ============================================================================================
+
+
+
+}
+
+
 
 // SETTERS ********************************************************************************************************
 
@@ -91,6 +321,13 @@ void P1MatrixAssembler::setPhysicalParameters(PhysicalParameters *newPhysicalPar
 {
     physicalParameters = newPhysicalParameters;
 }
+
+
+void P1MatrixAssembler::setToEnrich_elements(Eigen::SparseMatrix<unsigned int> *newToEnrich_elements)
+{
+    toEnrich_elements = newToEnrich_elements;
+}
+
 
 // *****************************************************************************************************
 
@@ -638,6 +875,9 @@ void P1MatrixAssembler::constructElement_AhF(Gedim::Eigen_SparseArray<>& M,
                 + mappedWeights(q) * 2 * this->physicalParameters->getNormalTransmissivityFracture() * Phi_i_q * Phi_j_q;
 
     }
+
+    // TODO: Check whether .Triplet sums or not
+    M.Triplet(row, col, integralValue);
 }
 
 

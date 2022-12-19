@@ -391,6 +391,9 @@ void EllipticProblem::Run()
     assembler->setPsiF_Pivot(&fracturePivot);
 
     assembler->setToEnrich_nodes(&toEnrich_nodes);
+    assembler->setToEnrich_elements(&toEnrich_elements);
+
+    assembler->initialize_2D_3DCoupling();
 
     if (numDofs > 0)
     {
