@@ -1,6 +1,6 @@
 #include "PhysicalParameters.hpp"
 
-
+namespace XFEM_3D {
 
 PhysicalParameters::PhysicalParameters()
 {
@@ -49,4 +49,6 @@ void PhysicalParameters::setNormalTransmissivityFracture(double newNormalTransmi
 double PhysicalParameters::getNormalTransmissivityFracture() const
 {
     return normalTransmissivityFracture;
+}
+
 }

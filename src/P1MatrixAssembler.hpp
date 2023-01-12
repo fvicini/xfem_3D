@@ -18,15 +18,23 @@ enum struct integrationType
     std_std,
     std_enr,
     enr_std,
-    enr_enr
+    enr_enr,
+    std,  // for right hand side
+    enr   // for right hand side
 };
 
+enum struct fractureBorder
+{
+    positive,
+    negative,
+    fracture
+};
 
 class P1MatrixAssembler
 {
 private:
 
-    // Mesh and pivot vector for the h^D variable
+    // 3D Mesh and pivot vector
     Gedim::MeshMatricesDAO* hD_Mesh;
     Eigen::VectorXi* hD_Pivot;
 
@@ -37,29 +45,9 @@ private:
     Eigen::SparseMatrix<unsigned int>* hD_PsiM_MeshIntersections;
     Eigen::SparseMatrix<unsigned int>* hD_PsiF_MeshIntersections;
 
-    // Mesh and pivot vector for the h^F variable
+    // 2D Mesh and Pivot vector
     Gedim::MeshMatricesDAO* hF_Mesh;
     Eigen::VectorXi* hF_Pivot;
-
-    // Mesh and pivot vector for the psi^p variable
-    Gedim::MeshMatricesDAO* psiP_Mesh;
-    Eigen::VectorXi* psiP_Pivot;
-
-    // Mesh and pivot vector for the psi^m variable
-    Gedim::MeshMatricesDAO* psiM_Mesh;
-    Eigen::VectorXi* psiM_Pivot;
-
-    // Mesh and pivot vector for the psi^F variable
-    Gedim::MeshMatricesDAO* psiF_Mesh;
-    Eigen::VectorXi* psiF_Pivot;
-
-    // Mesh and pivot vector for the lambda^D Lagrange multiplier
-    Gedim::MeshMatricesDAO* lambdaD_Mesh;
-    Eigen::VectorXi* lambdaD_Pivot;
-
-    // Mesh and pivot vector for the lambda^F Lagrange multiplier
-    Gedim::MeshMatricesDAO* lambdaF_Mesh;
-    Eigen::VectorXi* lambdaF_Pivot;
 
     // Fracture
     Fracture3D* fracture;
@@ -80,58 +68,112 @@ public:
                         Gedim::GeometryUtilities* geometryUtilities,
                         Gedim::MeshUtilities* meshutilities);
 
-     void assemble_AhD(Gedim::Eigen_SparseArray<>& AhD,
-                            Gedim::Eigen_SparseArray<>& AhD_dirich,
-                            Gedim::Eigen_Array<>& rightHandSide);
+    // Assemblers
 
-     void assemble_AhF(Gedim::Eigen_SparseArray<>& AhF,
-                            Gedim::Eigen_SparseArray<>& AhF_dirich,
-                            Gedim::Eigen_Array<>& rightHandSide);
+    // This function is a public wrapper function for all the "assemble" functions
+    void assembleXFEM();
+
+
+
+    // Setters ******************************************************************************
 
      void setHD_Mesh(Gedim::MeshMatricesDAO *newHD_Mesh);
      void setHD_Pivot(Eigen::VectorXi *newHD_Pivot);
-     void setToEnrich_nodes(Eigen::SparseMatrix<unsigned int> *newToEnrich_nodes);
-     void setToEnrich_elements(Eigen::SparseMatrix<unsigned int> *newToEnrich_elements);
      void setHF_Mesh(Gedim::MeshMatricesDAO *newHF_Mesh);
      void setHF_Pivot(Eigen::VectorXi *newHF_Pivot);
-     void setPsiP_Mesh(Gedim::MeshMatricesDAO *newPsiP_Mesh);
-     void setPsiP_Pivot(Eigen::VectorXi *newPsiP_Pivot);
-     void setPsiM_Mesh(Gedim::MeshMatricesDAO *newPsiM_Mesh);
-     void setPsiM_Pivot(Eigen::VectorXi *newPsiM_Pivot);
-     void setPsiF_Mesh(Gedim::MeshMatricesDAO *newPsiF_Mesh);
-     void setPsiF_Pivot(Eigen::VectorXi *newPsiF_Pivot);
-     void setLambdaD_Mesh(Gedim::MeshMatricesDAO *newLambdaD_Mesh);
-     void setLambdaD_Pivot(Eigen::VectorXi *newLambdaD_Pivot);
-     void setLambdaF_Mesh(Gedim::MeshMatricesDAO *newLambdaF_Mesh);
-     void setLambdaF_Pivot(Eigen::VectorXi *newLambdaF_Pivot);
      void setPhysicalParameters(PhysicalParameters *newPhysicalParameters);
 
-     // Construction of _2D_3D_intersections.
-     void initialize_2D_3DCoupling();
+     // **************************************************************************************
+
+     // Construction of _2D_3D_intersections and enrichment information
+
+     void initialize();
 
 private:
 
-    void constructElement_AhD(Gedim::Eigen_SparseArray<>& M,
-                     const unsigned int i,
-                     const unsigned int j,
-                     const unsigned int elementIndex,
-                     const integrationType type);
+     // Right hand side *******************************************************************
 
-    void constructElement_AhF(Gedim::Eigen_SparseArray<>& M,
-                     const unsigned int i,
-                     const unsigned int j,
-                     const unsigned int elementIndex);
+     void constructElement_Rhs(Eigen::VectorXd&      rhs,
+                               const unsigned int    i,
+                               const unsigned int ii_std,
+                               const unsigned int    elementIndex,
+                               const integrationType type);
+
+     // PDE Discretization *****************************************************************
+     // hD - hD
+     void constructElement_AhD(Eigen::SparseMatrix<double>& M,
+                               const unsigned int row,
+                               const unsigned int col,
+                               const unsigned int ii_std,
+                               const unsigned int jj_std,
+                               const unsigned int elementIndex,
+                               const integrationType type);
+
+     // h - h
+     void constructElement_AhF(Eigen::SparseMatrix<double>& M,
+                               const unsigned int i,
+                               const unsigned int j,
+                               const unsigned int elementIndex);
+
+     // TODO...
+
+
+     // Functional Discretization ************************************************************
 
 
 
+     // TODO...
+
+     // **************************************************************************************
+public:
+
+     // Funzioni assemble: queste saranno chiamate dentro assembleXFEM.
+     void assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
+                         Eigen::SparseMatrix<double>& AhD_dirich,
+                         Eigen::SparseMatrix<double>& GhD,
+                         Eigen::SparseMatrix<double>& GhD_dirich,
+                         Eigen::VectorXd&             rightHandSide);
+
+     void assemble_h_h(Eigen::SparseMatrix<double>& Ah,
+                       Eigen::SparseMatrix<double>& Ah_dirich,
+                       Eigen::SparseMatrix<double>& Gh,
+                       Eigen::SparseMatrix<double>& Gh_dirich,
+                       Eigen::SparseMatrix<double>& EF,
+                       Eigen::SparseMatrix<double>& EF_dirich,
+                       Eigen::SparseMatrix<double>& GPsiF,
+                       Eigen::SparseMatrix<double>& GPsiF_dirich);
+
+     void assemble_hD_h(Eigen::SparseMatrix<double>& BPsiF,
+                        Eigen::SparseMatrix<double>& BPsiF_dirich);
+
+     void assemble_hD_Psi(Eigen::SparseMatrix<double>& BPsiPlus,
+                          Eigen::SparseMatrix<double>& BPsiPlus_dirich,
+                          Eigen::SparseMatrix<double>& BPsiMinus,
+                          Eigen::SparseMatrix<double>& BPsiMinus_dirich,
+                          Eigen::SparseMatrix<double>& EPlus,
+                          Eigen::SparseMatrix<double>& EPlus_dirich,
+                          Eigen::SparseMatrix<double>& EMinus,
+                          Eigen::SparseMatrix<double>& EMinus_dirich);
+
+     void assemble_h_Psi(Eigen::SparseMatrix<double>& DPsiPlus,
+                         Eigen::SparseMatrix<double>& DPsiPlus_dirich,
+                         Eigen::SparseMatrix<double>& DPsiMinus,
+                         Eigen::SparseMatrix<double>& DPsiMinus_dirich);
+
+     void assemble_Psi_Psi(Eigen::SparseMatrix<double>& GPsiPlus,
+                           Eigen::SparseMatrix<double>& GPsiPlus_dirich,
+                           Eigen::SparseMatrix<double>& GPsiMinus,
+                           Eigen::SparseMatrix<double>& GPsiMinus_dirich);
 
 
-    void constructEl_RHS_A(Gedim::Eigen_Array<> &rhs,
-                           unsigned int i,
-                           const Gedim::GeometryUtilities &geometryUtilities);
-    void constructEl_RHS_B(Gedim::Eigen_Array<> &rhs,
-                           unsigned int i,
-                           const Gedim::GeometryUtilities &geometryUtilities);
+    // **************************************************************************************
+
+
+     void initialize_2D_3DCoupling(fractureBorder type);
+
+     void initializeEnrichmentInformation();
+
+     inline unsigned int getNumberEnrichments() { return this->toEnrich_nodes->sum(); };
 
 
 

@@ -2,6 +2,12 @@
 #define PHYSICALPARAMETERS_H
 
 #include "GeometryUtilities.hpp"
+#include "Utilities.hpp"
+#include "Fracture3D.hpp"
+
+namespace XFEM_3D {
+
+
 
 class PhysicalParameters
 {
@@ -21,6 +27,19 @@ public:
     void setIdrostaticPermeabilityTensorOnFracture(const double p);
     void setNormalTransmissivityFracture(double newNormalTransmissivityFracture);
     double getNormalTransmissivityFracture() const;
+
+    inline double forcingTerm(const Eigen::Vector3d pointCoords, Fracture3D fracture)
+    {
+        double x = pointCoords[0], y = pointCoords[1], z = pointCoords[2];
+
+        if (Utilities::signedDistanceFunction(pointCoords, fracture) >= 0)
+            return -32*( x*y*(1-x)*(1-y) + x*z*(1-x)*(1-z) + y*z*(1-y)*(1-z) );
+
+        else
+            return  32*( x*y*(1-x)*(1-y) + x*z*(1-x)*(1-z) + y*z*(1-y)*(1-z) );
+
+    };
 };
 
+}
 #endif // PHYSICALPARAMETERS_H

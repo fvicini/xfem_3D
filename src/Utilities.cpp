@@ -41,7 +41,7 @@ namespace Utilities
         double z_i = nodeCoordinates(2);
 
         Eigen::MatrixXd elementPoints = element.Vertices;
-        Eigen::MatrixXd elementPointsExceptNode;
+        Eigen::MatrixXd elementPointsExceptNode(3,3);
 
         // Determine which point in elementPoints is the node (has to be one of them). You are goign to exclude it
         // from the conditions of the linear system.
@@ -51,8 +51,9 @@ namespace Utilities
         for (unsigned int k = 0; k < 3; k++)
         {
             Eigen::Vector3d diff = elementPoints.col(k) - nodeCoordinates;
+            double diffNorm = diff.norm();
 
-            if (diff.norm() < 1e-16)
+            if (diffNorm < 1e-16)
                 chosen_k = k;
             else
             {
@@ -63,7 +64,7 @@ namespace Utilities
 
         if (chosen_k == 42)
         {
-            std::cerr << "Something went wrong trying to determine the coefficient of the 3D lagrange basis functions!";
+            std::cerr << "Something went wrong trying to determine the coefficient of the 3D lagrange basis functions!" << std::endl;
         }
 
         //
@@ -128,7 +129,7 @@ namespace Utilities
 
         if (chosen_k == 42)
         {
-            std::cerr << "Something went wrong trying to determine the coefficient of the 2D lagrange basis functions!";
+            std::cerr << "Something went wrong trying to determine the coefficient of the 2D lagrange basis functions!" << std::endl;
         }
 
         Eigen::Vector2d x_e, y_e;

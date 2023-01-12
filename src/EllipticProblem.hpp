@@ -40,6 +40,8 @@ namespace XFEM_3D
 
       void Run();
 
+      void RunTestXFEM();
+
 };
 
 

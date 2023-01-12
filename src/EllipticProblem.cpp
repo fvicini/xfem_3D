@@ -2,14 +2,16 @@
 #include "Fracture3D.hpp"
 #include "P1MatrixAssembler.hpp"
 
+#include <unsupported/Eigen/SparseExtra>
+
 
 #include "Configurations.hpp"
 #include "MeshMatrices.hpp"
 #include "MeshMatricesDAO.hpp"
 #include "MeshUtilities.hpp"
 #include "VTKUtilities.hpp"
-#include "Eigen_SparseArray.hpp"
-#include "Eigen_Array.hpp"
+//#include "Eigen_SparseArray.hpp"
+//#include "Eigen_Array.hpp"
 #include "Eigen_CholeskySolver.hpp"
 #include "math.h"
 
@@ -223,6 +225,7 @@ void EllipticProblem::Run()
                                         "Qpqfenza");
 
 
+
     // Export the block mesh
     meshUtilities.ExportMeshToVTU(blockMesh,
                                   exportVtuFolder,
@@ -261,102 +264,18 @@ void EllipticProblem::Run()
 
 
     // Construct the pivot vector for the block Mesh
-    Eigen::VectorXi pivot;
+    Eigen::VectorXi pivot(blockMesh.Cell0DTotalNumber());
     for (unsigned int n = 0; n < blockMesh.Cell0DTotalNumber(); n++)
     {
         pivot[n] = blockMesh.Cell0DMarker(n);
     }
 
     // Construct the pivot vector for the fracture mesh
-    Eigen::VectorXi fracturePivot;
+    Eigen::VectorXi fracturePivot(fractureMesh.Cell0DTotalNumber());
     for (unsigned int n = 0; n < fractureMesh.Cell0DTotalNumber(); n++)
     {
         fracturePivot[n] = fractureMesh.Cell0DMarker(n);
     }
-
-
-    // Determine the effective number of DOFs (enrichment included).
-    double numDofs = blockMeshData.NumberCell0D; // Not so true: Dirichlet conditions?
-
-
-    // Construction/fill up of boolean matrices
-    SparseMatrix<unsigned int> toEnrich_elements(blockMesh.Cell3DTotalNumber(), num_fractures);
-    SparseMatrix<unsigned int> toEnrich_nodes(blockMeshData.NumberCell0D, num_fractures);
-    for (unsigned int e = 0; e < blockMesh.Cell3DTotalNumber(); e++)
-    {
-        const Gedim::GeometryUtilities::Polyhedron element = meshUtilities.MeshCell3DToPolyhedron(blockMesh, e);
-
-        for (unsigned int f = 0; f < num_fractures; f++)
-        {
-            if (fractureNetwork.at(f)->intersects(element))
-            {
-                // Set (e,f) entry of matrix to true, meaning element e is to enrich wrt fracture f.
-                toEnrich_elements.insert(e, f) = 1;
-
-                // Retrieve the global Id of the verteces of element
-                unsigned int idNodo1, idNodo2, idNodo3, idNodo4, num_cells = blockMeshData.NumberCell3D;
-
-                const unsigned int numCell3DNodes = blockMesh.Cell3DNumberVertices(e);
-
-                idNodo1 = blockMesh.Cell3DVertex(e, 0);
-                idNodo2 = blockMesh.Cell3DVertex(e, 1);
-                idNodo3 = blockMesh.Cell3DVertex(e, 2);
-                idNodo4 = blockMesh.Cell3DVertex(e, 3);
-
-                const Eigen::Vector3d nodo1 = blockMesh.Cell3DVertexCoordinates(e, 1);
-                const Eigen::Vector3d nodoGlobal = blockMesh.Cell0DCoordinates(idNodo2);
-
-                toEnrich_nodes.coeffRef(idNodo1, f) = 1;
-                toEnrich_nodes.coeffRef(idNodo2, f) = 1;
-                toEnrich_nodes.coeffRef(idNodo3, f) = 1;
-                toEnrich_nodes.coeffRef(idNodo4, f) = 1;
-
-                // Export reproducing element to Paraview for visualization
-                {
-                    const vector<double> cellVolume(1, meshGeometricData.Cell3DsVolumes[e]);
-                    Gedim::VTKUtilities vtkUtilities;
-                    vtkUtilities.AddPolyhedron(element.Vertices,
-                                               element.Edges,
-                                               element.Faces
-                                               /*{
-                                                                                                         {
-                                                                                                             "Volume",
-                                                                                                             Gedim::VTPProperty::Cells,
-                                                                                                             static_cast<unsigned int>(cellVolume.size()),
-                                                                                                             cellVolume.data()
-                                                                                                         }
-                                                                                                     }*/);
-                    vtkUtilities.Export(exportTest +
-                                        "/ReproducingElement_" +
-                                        to_string(e) +
-                                        ".vtu");
-                }
-
-                {
-                    const vector<double> cellVolume(1, meshGeometricData.Cell3DsVolumes[e]);
-                    Gedim::VTKUtilities vtkUtilities;
-                    vtkUtilities.AddPoint(nodo1);
-                    vtkUtilities.Export(exportTest +
-                                        "/enrichedNode_" +
-                                        to_string(idNodo1) +
-                                        ".vtu");
-                }
-
-            }
-
-        }
-    }
-
-
-    // Computing the number of DOFS
-    unsigned int numEnrichements = toEnrich_nodes.nonZeros();
-    numDofs += numEnrichements;
-
-
-    // Number of Dirichlet nodes
-    unsigned int numDirich = 0;
-
-
 
     const double h = *max_element(std::begin(meshGeometricData.Cell3DsVolumes),
                                   std::end(meshGeometricData.Cell3DsVolumes));
@@ -369,10 +288,12 @@ void EllipticProblem::Run()
     /// Assemble System
     Gedim::Output::PrintGenericMessage("Assemble System FEM...", true);
 
-    Gedim::Eigen_SparseArray<> AhD;
-    Gedim::Eigen_SparseArray<> AhD_dirich;
-    Gedim::Eigen_Array<> rightHandSide;
-    Gedim::Eigen_Array<> solution;
+
+    // Physical parameters of the problem
+    PhysicalParameters* params = new PhysicalParameters();
+    params->setIdrostaticPermeabilityTensorOnVolume(1);
+    params->setIdrostaticPermeabilityTensorOnFracture(1);
+    params->setNormalTransmissivityFracture(1);
 
     // Creation and setting of the assembler object
     P1MatrixAssembler *assembler = new P1MatrixAssembler(fractureNetwork.at(0),
@@ -380,50 +301,77 @@ void EllipticProblem::Run()
                                                          &meshUtilities);
     assembler->setHD_Mesh(&blockMesh);
     assembler->setHF_Mesh(&fractureMesh);
-    assembler->setPsiP_Mesh(&fractureMesh);
-    assembler->setPsiM_Mesh(&fractureMesh);
-    assembler->setPsiF_Mesh(&fractureMesh);
 
     assembler->setHD_Pivot(&pivot);
     assembler->setHF_Pivot(&fracturePivot);
-    assembler->setPsiP_Pivot(&fracturePivot);
-    assembler->setPsiM_Pivot(&fracturePivot);
-    assembler->setPsiF_Pivot(&fracturePivot);
 
-    assembler->setToEnrich_nodes(&toEnrich_nodes);
-    assembler->setToEnrich_elements(&toEnrich_elements);
+    assembler->setPhysicalParameters(params);
 
-    assembler->initialize_2D_3DCoupling();
+    assembler->initialize();
 
-    if (numDofs > 0)
+    // Determine the effective number of DOFs (enrichment included).
+    int numDofs3D = blockMeshData.NumberCell0D;
+    unsigned int numEnrichements = assembler->getNumberEnrichments();
+    numDofs3D += numEnrichements;
+
+    // Number of Dirichlet nodes
+    unsigned int numDirich3D = 0;
+
+    // System matrices definition
+    Eigen::SparseMatrix<double> AhD(numDofs3D, numDofs3D),
+                                AhD_dirich(numDofs3D, numDirich3D),
+                                GhD,
+                                GhD_dirich;
+    Eigen::VectorXd rightHandSide(numDofs3D);
+    Eigen::VectorXd solution(numDofs3D);
+
+    if (numDofs3D > 0)
     {
-        AhD.SetSize(numDofs, numDofs);  // Gedim::ISparseArray::SparseArrayTypes::Symmetric);
-        AhD_dirich.SetSize(numDofs, numDirich);
-        rightHandSide.SetSize(numDofs);
-        solution.SetSize(numDofs);
 
-        assembler->assemble_AhD(AhD, AhD_dirich, rightHandSide);
-
-
+        assembler->assemble_hD_hD(AhD, AhD_dirich, GhD, GhD_dirich, rightHandSide);
 
     }
 
     Gedim::Output::PrintStatusProgram("Assemble System");
 
+    // ***************************************************************************************
+    // Export AhD Matrix to .txt file
+    const string exportMatrFolder = exportFolder + "/Matrices";
+    Gedim::Output::CreateFolder(exportMatrFolder);
+
+    const string matrixFile = exportMatrFolder + "/AhD.txt";
+    ofstream fw(matrixFile, std::ofstream::out);
+
+    if (fw.is_open())
+    {
+        fw << "\n\n";
+        Eigen::MatrixXd AhD_dense = AhD.toDense();
+        for(unsigned int i = 0; i < AhD_dense.rows(); i++)
+        {
+            for(unsigned int j = 0; j < AhD_dense.cols(); j++)
+            {
+                fw << AhD_dense(i,j) << " ";
+            }
+            fw << "\n";
+        }
+        fw.close();
+    }
+    else std::cout << "Problem with opening file";
+    // ***************************************************************************************
 
 
     /// Solve
-//    Gedim::Output::PrintGenericMessage("Solve...", true);
+    Gedim::Output::PrintGenericMessage("Solve...", true);
 
-//    if (numDofs > 0)
-//    {
+    if (numDofs3D > 0)
+    {
 //        Gedim::Eigen_CholeskySolver<> choleskySolver;
-//        choleskySolver.Initialize(M,
+//        choleskySolver.Initialize(AhD,
 //                                  rightHandSide,
 //                                  solution);
 //        choleskySolver.Solve();
 //        cerr<< solution<< endl;
-//    }
+    }
 
 //    Gedim::Output::PrintStatusProgram("Solve");
 }
