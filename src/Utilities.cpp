@@ -48,7 +48,7 @@ namespace Utilities
 
         unsigned int chosen_k = 42;
         unsigned int position = 0;
-        for (unsigned int k = 0; k < 3; k++)
+        for (unsigned int k = 0; k < 4; k++)
         {
             Eigen::Vector3d diff = elementPoints.col(k) - nodeCoordinates;
             double diffNorm = diff.norm();
@@ -70,7 +70,7 @@ namespace Utilities
         //
 
         Eigen::Vector3d x_e, y_e, z_e;
-        for (unsigned int k = 0; k < 2; k++)
+        for (unsigned int k = 0; k < 3; k++)
         {
             x_e(k) = elementPointsExceptNode.col(k).x();
             y_e(k) = elementPointsExceptNode.col(k).y();
@@ -114,7 +114,7 @@ namespace Utilities
 
         unsigned int chosen_k = 42;
         unsigned int position = 0;
-        for (unsigned int k = 0; k < 2; k++)
+        for (unsigned int k = 0; k < 3; k++)
         {
             Eigen::Vector3d diff = elementPoints.col(k) - nodeCoordinates;
 

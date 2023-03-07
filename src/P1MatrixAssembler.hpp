@@ -9,6 +9,8 @@
 #include "Fracture3D.hpp"
 #include "PhysicalParameters.hpp"
 
+#include <map>
+
 namespace XFEM_3D
 {
 
@@ -41,6 +43,7 @@ private:
     // Addtional boolean matrices for the enrichments and 2D/3D coupling
     Eigen::SparseMatrix<unsigned int>* toEnrich_nodes;
     Eigen::SparseMatrix<unsigned int>* toEnrich_elements;
+    map<unsigned int, unsigned int>    standardToEnriched;  // maps standard indeces to index of their enrichment
     Eigen::SparseMatrix<unsigned int>* hD_PsiP_MeshIntersections;
     Eigen::SparseMatrix<unsigned int>* hD_PsiM_MeshIntersections;
     Eigen::SparseMatrix<unsigned int>* hD_PsiF_MeshIntersections;
@@ -87,7 +90,7 @@ public:
 
      // Construction of _2D_3D_intersections and enrichment information
 
-     void initialize();
+     void initialize(unsigned int numDirich);
 
 private:
 
@@ -95,7 +98,7 @@ private:
 
      void constructElement_Rhs(Eigen::VectorXd&      rhs,
                                const unsigned int    i,
-                               const unsigned int ii_std,
+                               const unsigned int    ii_std,
                                const unsigned int    elementIndex,
                                const integrationType type);
 
@@ -171,7 +174,7 @@ public:
 
      void initialize_2D_3DCoupling(fractureBorder type);
 
-     void initializeEnrichmentInformation();
+     void initializeEnrichmentInformation(unsigned int numDirich);
 
      inline unsigned int getNumberEnrichments() { return this->toEnrich_nodes->sum(); };
 

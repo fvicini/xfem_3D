@@ -12,7 +12,7 @@
 #include "VTKUtilities.hpp"
 //#include "Eigen_SparseArray.hpp"
 //#include "Eigen_Array.hpp"
-#include "Eigen_CholeskySolver.hpp"
+#include "Eigen_LUSolver.hpp"
 #include "math.h"
 
 #include "Quadrature_Gauss3D_Tetrahedron.hpp"
@@ -265,9 +265,23 @@ void EllipticProblem::Run()
 
     // Construct the pivot vector for the block Mesh
     Eigen::VectorXi pivot(blockMesh.Cell0DTotalNumber());
+    unsigned int numDirich3D = 0;
+    unsigned int numNOTDirich3D = 0;
     for (unsigned int n = 0; n < blockMesh.Cell0DTotalNumber(); n++)
     {
-        pivot[n] = blockMesh.Cell0DMarker(n);
+        double zCoordCurrentPoint = blockMesh.Cell0DCoordinateZ(n);
+        bool pointIsDirich = (zCoordCurrentPoint == 0.0) || (zCoordCurrentPoint == 1.0);
+
+        if (pointIsDirich)
+        {
+            numDirich3D++;
+            pivot[n] = -numDirich3D;
+        }
+        else
+        {
+            numNOTDirich3D++;
+            pivot[n] = numNOTDirich3D;
+        }
     }
 
     // Construct the pivot vector for the fracture mesh
@@ -307,15 +321,13 @@ void EllipticProblem::Run()
 
     assembler->setPhysicalParameters(params);
 
-    assembler->initialize();
+    assembler->initialize(numDirich3D);
 
     // Determine the effective number of DOFs (enrichment included).
-    int numDofs3D = blockMeshData.NumberCell0D;
+    int numDofs3D = blockMesh.Cell0DTotalNumber();
+    numDofs3D -= numDirich3D;
     unsigned int numEnrichements = assembler->getNumberEnrichments();
     numDofs3D += numEnrichements;
-
-    // Number of Dirichlet nodes
-    unsigned int numDirich3D = 0;
 
     // System matrices definition
     Eigen::SparseMatrix<double> AhD(numDofs3D, numDofs3D),
@@ -365,7 +377,9 @@ void EllipticProblem::Run()
 
     if (numDofs3D > 0)
     {
-//        Gedim::Eigen_CholeskySolver<> choleskySolver;
+//        Gedim::Eigen_SparseArray Ahd_as_sparse_array =
+
+//        Gedim::Eigen_LUSolver<> choleskySolver;
 //        choleskySolver.Initialize(AhD,
 //                                  rightHandSide,
 //                                  solution);

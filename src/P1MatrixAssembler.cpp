@@ -22,7 +22,7 @@ P1MatrixAssembler::P1MatrixAssembler(Fracture3D* fracture,
 
 // Initialization of the assembler ********************************************************************************
 
-void P1MatrixAssembler::initialize()
+void P1MatrixAssembler::initialize(unsigned int numDirich)
 {
     // This method has to be called after setting all the meshes.
     bool incompleteSettings = (this->hD_Mesh == NULL) || (this->hF_Mesh == NULL);
@@ -34,7 +34,7 @@ void P1MatrixAssembler::initialize()
     }
 
     // Initializing the enrichment information
-    this->initializeEnrichmentInformation();
+    this->initializeEnrichmentInformation(numDirich);
 
     // Initializing the coupling for hD, PsiP variables
     //this->initialize_2D_3DCoupling(fractureBorder::positive);
@@ -140,14 +140,14 @@ void P1MatrixAssembler::initialize_2D_3DCoupling(fractureBorder type)
 
 }
 
-void P1MatrixAssembler::initializeEnrichmentInformation()
+void P1MatrixAssembler::initializeEnrichmentInformation(unsigned int numDirich)
 {
-
-
     Gedim::MeshMatricesDAO* mesh3D = this->hD_Mesh;
 
+    // Part 1: Create boolean vectors of elements/nodes to enrich
+
     this->toEnrich_elements = new Eigen::SparseMatrix<unsigned int>(mesh3D->Cell3DTotalNumber(), 1);
-    this->toEnrich_nodes    = new Eigen::SparseMatrix<unsigned int>(mesh3D->Cell0DTotalNumber(), 1);
+    this->toEnrich_nodes    = new Eigen::SparseMatrix<unsigned int>(mesh3D->Cell0DTotalNumber()+1, 1);
 
     for (unsigned int e = 0; e < mesh3D->Cell3DTotalNumber(); e++)
     {
@@ -156,7 +156,6 @@ void P1MatrixAssembler::initializeEnrichmentInformation()
         if (this->fracture->intersects(elementAsPolyhedron))
         {
             // Set (e,f) entry of matrix to true, meaning element e is to enrich wrt fracture f.
-            // There is only one
             this->toEnrich_elements->insert(e, 0) = 1;
 
             // Retrieve the global Id of the verteces of element
@@ -167,13 +166,31 @@ void P1MatrixAssembler::initializeEnrichmentInformation()
             idNodo3 = mesh3D->Cell3DVertex(e, 2);
             idNodo4 = mesh3D->Cell3DVertex(e, 3);
 
-            this->toEnrich_nodes->coeffRef(idNodo1, 0) = 1;
-            this->toEnrich_nodes->coeffRef(idNodo2, 0) = 1;
-            this->toEnrich_nodes->coeffRef(idNodo3, 0) = 1;
-            this->toEnrich_nodes->coeffRef(idNodo4, 0) = 1;
+            this->toEnrich_nodes->coeffRef(idNodo1+1, 0) = 1;
+            this->toEnrich_nodes->coeffRef(idNodo2+1, 0) = 1;
+            this->toEnrich_nodes->coeffRef(idNodo3+1, 0) = 1;
+            this->toEnrich_nodes->coeffRef(idNodo4+1, 0) = 1;
 
         }
     }
+
+    // Part 2 : Create variable stadardToEnriched.
+    for (unsigned int nn_std = 1; nn_std <= mesh3D->Cell0DTotalNumber(); nn_std++)
+    {
+        if (this->toEnrich_nodes->coeff(nn_std, 0))
+        {
+            unsigned int nn_enr = this->toEnrich_nodes->rows();
+
+            for (unsigned int index = 0; index < nn_std; index++)
+            {
+                nn_enr += this->toEnrich_nodes->coeff(index, 0);
+            }
+
+            this->standardToEnriched[nn_std] = nn_enr - numDirich;
+        }
+    }
+
+
 
 }
 
@@ -223,54 +240,30 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
     for (unsigned int e = 0; e < blockMesh.Cell3DTotalNumber(); e++)
     {
         // Cycle on the test function index
-        for (unsigned short int i = 0; i < 3; i++)
+        for (unsigned short int i = 0; i < 4; i++)
         {
 
-            //int ii_std = pivot[blockMesh.Cell3DVertex(e, i)];
-            int ii_std = blockMesh.Cell3DVertex(e, i);
+            int ii_std = pivot[blockMesh.Cell3DVertex(e, i)];
 
-            if (ii_std+1 > 0)
+            if (ii_std > 0) // Il nodo (e,i) è un DOF. Può essere da arricchire o no.
+
             {
 
-                if (toEnrich_nodes.coeff(ii_std, 0)) // ii node is to be enriched
+                if (toEnrich_nodes.coeff(ii_std, 0)) // Il nodo (e,i) è da arricchire
                 {
-
-                    // Computing the index of the enriched DOF corresponding to (e,i) node.
-                    unsigned int numEnrNodesUpToNow = 0;
-                    for (unsigned int temp_ind = 0; temp_ind < ii_std; temp_ind++)
-                    {
-                        numEnrNodesUpToNow += toEnrich_nodes.coeff(temp_ind, 0);
-                    }
-                    unsigned int ii_enr = pivot.size() + numEnrNodesUpToNow;
-
+                    unsigned int ii_enr = this->standardToEnriched[ii_std];
 
                     // Cycling on the trial function index
-                    for (unsigned short int j = 0; j < 3; j++)
+                    for (unsigned short int j = 0; j < 4; j++)
                     {
+                        int jj_std = pivot[blockMesh.Cell3DVertex(e, j)];
 
-                        //int jj_std = pivot[blockMesh.Cell3DVertex(e, j)];
-                        int jj_std = blockMesh.Cell3DVertex(e, j);
-
-                        if (jj_std+1 > 0)
+                        if (jj_std > 0)
                         {
 
                             if (toEnrich_nodes.coeff(jj_std, 0))
                             {
-
-                                // Computing the index of the enriched DOF corresponding to (e,j) node.
-                                numEnrNodesUpToNow = 0;
-                                for (unsigned int temp_ind = 0; temp_ind < ii_std; temp_ind++)
-                                {
-                                    numEnrNodesUpToNow += toEnrich_nodes.coeff(temp_ind, 0);
-                                }
-                                unsigned int jj_enr = pivot.size() + numEnrNodesUpToNow;
-
-
-                                /* In questo caso, devi aggiungere elementi ad A
-                                 *   (std test vs std trial), B (enr test vs std
-                                 *   trial), A_tilde (std test vs enr trial),
-                                 *   B_tilde (enr test vs enr trial).
-                                 */
+                                unsigned int jj_enr = this->standardToEnriched[jj_std];
 
                                 this->constructElement_AhD(AhD, ii_std, jj_std, ii_std, jj_std, e, integrationType::std_std);
 
@@ -283,61 +276,51 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                             }
                             else
                             {
-                                /* In questo caso, devi aggiungere elementi ad A
-                                   (std test vs std trial) e B (enr test vs std
-                                   trial). */
-
                                 this->constructElement_AhD(AhD, ii_std, jj_std, ii_std, jj_std, e, integrationType::std_std);
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_std, ii_std, jj_std, e,  integrationType::enr_std);
+                                this->constructElement_AhD(AhD, ii_enr, jj_std, ii_std, jj_std, e, integrationType::enr_std);
                             }
 
                         }
-                        else  // jj_std è nodo di Dirichlet
+                        else  // Il nodo (e,j) è di Dirichlet. Può essere da arricchire.
                         {
-                            /*  In questo caso, hai un nodo di Dirichlet su
-                                jj_std. Hai fatto le cose in modo tale che i
-                                nodi di Dirichlet non portino arricchimenti.
-                                Quindi, metti nel rilevamento delle
-                                condizioni di Dirichlet solo per i DOF
-                                jj_std, che hanno però effetto sulle righe
-                                ii_enr. */
 
-                            this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
+//                            this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
 
-                            this->constructElement_AhD(AhD_dirich, ii_enr, -jj_std, ii_std, -jj_std, e, integrationType::enr_std);
+//                            this->constructElement_AhD(AhD_dirich, ii_enr, -jj_std, ii_std, -jj_std, e, integrationType::enr_std);
+
+                            if (toEnrich_nodes.coeff(-jj_std, 0))
+                            {
+                                unsigned int jj_enr = this->standardToEnriched[-jj_std];
+
+                                this->constructElement_AhD(AhD, ii_std, jj_enr, ii_std, -jj_std, e, integrationType::std_enr);
+
+                                this->constructElement_AhD(AhD, ii_enr, jj_enr, ii_std, -jj_std, e, integrationType::enr_enr);
+                            }
                         }
                     }
 
-                    this->constructElement_Rhs(rightHandSide, ii_std, ii_std, e, integrationType::std);
+                    //this->constructElement_Rhs(rightHandSide, ii_std, ii_std, e, integrationType::std);
 
-                    this->constructElement_Rhs(rightHandSide, ii_enr, ii_std, e, integrationType::enr);
+                    //this->constructElement_Rhs(rightHandSide, ii_enr, ii_std, e, integrationType::enr);
 
 
-                } else // ii node is NOT to be enriched
+                }
+                else // Il nodo (e,i) NON è da arricchire.
                 {
-                    for (unsigned short int j = 0; j < 3; j++)
+                    for (unsigned short int j = 0; j < 4; j++)
                     {
+                        int jj_std = pivot[blockMesh.Cell3DVertex(e, j)];
 
-                        //int jj_std = pivot[blockMesh.Cell3DVertex(e, j)];
-                        int jj_std = blockMesh.Cell3DVertex(e, j);
-
-                        if (jj_std+1 > 0)
+                        if (jj_std > 0) // Il nodo (e,j) è un DOF
                         {
 
                             if (toEnrich_nodes.coeff(jj_std, 0))
                             {
+                                unsigned int jj_enr = this->standardToEnriched[jj_std];
 
-                                // Computing the index of the enriched DOF corresponding to (e,j) node.
-                                unsigned int numEnrNodesUpToNow = 0;
-                                for (unsigned int temp_ind = 0; temp_ind < ii_std; temp_ind++)
-                                {
-                                    numEnrNodesUpToNow += toEnrich_nodes.coeff(temp_ind, 0);
-                                }
-                                unsigned int jj_enr = pivot.size() + numEnrNodesUpToNow;
-
-                                /* In questo caso, devi aggiungere elementi ad A
-                                   (std test vs std trial), A_tilde (std test vs enr trial). */
+                                if (ii_std == 3 && jj_std == 9)
+                                    std::cout << "Stop.";
 
                                 this->constructElement_AhD(AhD, ii_std, jj_std, ii_std, jj_std, e, integrationType::std_std);
 
@@ -345,32 +328,76 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                             }
                             else
                             {
-                                /* In questo caso, devi aggiungere elementi ad A
-                                   (std test vs std trial). */
-
                                 this->constructElement_AhD(AhD, ii_std, jj_std, ii_std, jj_std, e, integrationType::std_std);
                             }
 
                         }
-                        else  // jj_std è nodo di Dirichlet
+                        else // Il nodo (e,j) è di Dirichlet
                         {
-                            /*  In questo caso, hai un nodo di Dirichlet su
-                                jj_std. Hai fatto le cose in modo tale che i
-                                nodi di Dirichlet non portino arricchimenti.
-                                Quindi, metti nel rilevamento delle
-                                condizioni di Dirichlet solo per i DOF
-                                jj_std. */
 
-                            this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
+                            // this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
+
+                            if (toEnrich_nodes.coeff(-jj_std, 0))
+                            {
+                                unsigned int jj_enr = this->standardToEnriched[-jj_std];
+
+                                this->constructElement_AhD(AhD, ii_std, jj_enr, ii_std, -jj_std, e, integrationType::std_enr);
+                            }
 
                         }
 
                     }
 
-                    this->constructElement_Rhs(rightHandSide, ii_std, ii_std, e, integrationType::std);
+                    //this->constructElement_Rhs(rightHandSide, ii_std, ii_std, e, integrationType::std);
 
                 }
 
+            }
+
+            else // Il nodo (e,i) non è un DOF (è una condizione di Dirichlet). Può essere da arricchire o no.
+
+            {
+
+                if (toEnrich_nodes.coeff(-ii_std, 0)) // ii node is to be enriched
+                {
+                    unsigned int ii_enr = this->standardToEnriched[-ii_std];
+
+                    // Cycling on the trial function index
+                    for (unsigned short int j = 0; j < 4; j++)
+                    {
+                        int jj_std = pivot[blockMesh.Cell3DVertex(e, j)];
+
+                        if (jj_std > 0)
+                        {
+
+                            if (toEnrich_nodes.coeff(jj_std, 0))
+                            {
+
+                                unsigned int jj_enr = this->standardToEnriched[jj_std];
+
+                                this->constructElement_AhD(AhD, ii_enr, jj_std, -ii_std, jj_std, e, integrationType::enr_std);
+
+                                this->constructElement_AhD(AhD, ii_enr, jj_enr, -ii_std, jj_std, e, integrationType::enr_enr);
+
+                            }
+                            else
+                            {
+                                this->constructElement_AhD(AhD, ii_enr, jj_std, -ii_std, jj_std, e, integrationType::enr_std);
+                            }
+
+                        }
+                        else  // jj_std è nodo di Dirichlet
+                        {
+                            //  this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, -ii_std, -jj_std, e, integrationType::std_std);
+
+                            //  this->constructElement_AhD(AhD_dirich, ii_enr, -jj_std, -ii_std, -jj_std, e, integrationType::enr_std);
+
+
+                        }
+                    }
+
+                    //this->constructElement_Rhs(rightHandSide, ii_enr, -ii_std, e, integrationType::enr);
+                }
             }
         }
     }
@@ -379,21 +406,26 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
 
 
 void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
-                                               const unsigned int row,
-                                               const unsigned int col,
-                                               const unsigned int ii_std,
-                                               const unsigned int jj_std,
-                                               const unsigned int elementIndex,
-                                               const integrationType type)
+                                              unsigned int row,
+                                              unsigned int col,
+                                              unsigned int ii_std,
+                                              unsigned int jj_std,
+                                             const unsigned int elementIndex,
+                                             const integrationType type)
 {    
 
+    // I nodi nel vettore pivot sono organizzati con la numerazione di Matlab (perché lo zero non è negativo mè positivo, e quindi dà
+    // problemi nella gestione delle condizioni di Dirichlet, che si basa su nodi numerati negativamente e positivamente).
+    // Ora ritorniamo alla numerazione di C++
+    ii_std--;
+    jj_std--;
+    row--;
+    col--;
+
+    if (row == 3 && col == 9)
+        std::cout << "Stop.";
+
     std::cout << "Entered constructElement function." << std::endl;
-
-
-    if (row == 17 && col == 9)
-    {
-        std::cout << "Caso problematico" << std::endl;
-    }
 
     // We are assembling the A^hD matrix, therefore we use the mesh for the hD variable.
     Gedim::MeshMatricesDAO mesh = *this->hD_Mesh;
@@ -426,6 +458,7 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
 
         std::cout << "Starting a std_std integration... position in matrix: " << row << ", " << col << "\n" << std::endl;
 
+
         // Preparation of the quadrature formula
         const unsigned int quadratureOrder = 2;
         Eigen::MatrixXd quadraturePointsRef;
@@ -446,12 +479,13 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
         Eigen::VectorXd mappedWeights = quadratureWeightsRef.array() * mapping.DetJ(mapData,
                                                                                     quadraturePointsRef).array().abs();
 
+
         // Computing the integral
 
         Eigen::Vector3d GradPhi_i = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
         Eigen::Vector3d GradPhi_j = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
 
-        double scalarProduct = (this->physicalParameters->getPermeabilityTensorVolume() * GradPhi_i).transpose() * GradPhi_j;
+        double scalarProduct = (this->physicalParameters->getPermeabilityTensorVolume() * GradPhi_j).transpose() * GradPhi_i;
 
         for (unsigned int q = 0; q < mappedPoints.cols(); q++)
         {
@@ -463,11 +497,6 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
 
     case integrationType::enr_std:
     {
-
-        if(jj_std != col)
-        {
-            std::cout << "Qualcosa non va: jj_std è diverso da col. Dovrebbe essere uguale" << std::endl;
-        }
 
         std::cout << "Starting a enr_std integration... position in matrix: " << row << ", " << col << "\n" << std::endl;
 
@@ -555,7 +584,9 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
 
     case integrationType::enr_enr:
     {
+
         std::cout << "Starting a enr_enr integration...position in matrix: " << row << ", " << col << "\n" << std::endl;
+
 
         // Auxiliary geometric variables
         const std::vector<std::vector<bool>> polyhedronFaceEdgeDirections = geometryUtilities->PolyhedronFaceEdgeDirections(element.Vertices,
@@ -593,6 +624,7 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
         std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra;
         switch (result.Type)
         {
+
         // The element is blending: touches a reproducing element
         case Gedim::GeometryUtilities::SplitPolyhedronWithPlaneResult::Types::None:
         {
@@ -603,6 +635,7 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
 
         default: // The element is reproducing
         {
+
             std::vector<Gedim::GeometryUtilities::Polyhedron> subPolyhedra = geometryUtilities->SplitPolyhedronWithPlaneResultToPolyhedra(result);
 
 
@@ -655,7 +688,7 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
         for (unsigned short int t = 0; t < subTetrahedra.size(); t++)
         {
             // Mapping the reference quadrature nodes and weights on the t-th sub-tetrahedra
-            const Gedim::MapTetrahedron::MapTetrahedronData mapData = mapping.Compute(element.Vertices);
+            const Gedim::MapTetrahedron::MapTetrahedronData mapData = mapping.Compute(subTetrahedra.at(t).Vertices);
 
             Eigen::MatrixXd mappedPoints = mapping.F(mapData,
                                                      quadraturePointsRef);
