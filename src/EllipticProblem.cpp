@@ -12,7 +12,8 @@
 #include "VTKUtilities.hpp"
 //#include "Eigen_SparseArray.hpp"
 //#include "Eigen_Array.hpp"
-#include "Eigen_LUSolver.hpp"
+//#include "Eigen_LUSolver.hpp"
+#include "Eigen_CholeskySolver.hpp"
 #include "math.h"
 
 #include "Quadrature_Gauss3D_Tetrahedron.hpp"
@@ -138,6 +139,8 @@ EllipticProblem::~EllipticProblem()
 void EllipticProblem::Run()
 {
 
+    // CONFIGURAZIONE INIZIALE *****************************************************************************
+
     Gedim::GeometryUtilitiesConfig geometryUtilitiesConfig;
     geometryUtilitiesConfig.Tolerance = config.GeometricTolerance();
     Gedim::GeometryUtilities geometryUtilities(geometryUtilitiesConfig);
@@ -262,34 +265,49 @@ void EllipticProblem::Run()
     string exportTest = "./TEST";
     Gedim::Output::CreateFolder(exportTest);
 
+    // ***************************************************************************************************
 
-    // Construct the pivot vector for the block Mesh
-    Eigen::VectorXi pivot(blockMesh.Cell0DTotalNumber());
-    unsigned int numDirich3D = 0;
-    unsigned int numNOTDirich3D = 0;
+
+
+    // COSTRUZIONE DELLA MATRICE PIVOT PER LA MESH PER LA VARIABILE hD ***********************************
+    /*
+     * La prima colonna di pivot ('0') contiene la numerazione 1,2,3,4,5... (se DOF) e -1,-2,-3... (se Dirichlet).
+     * La seconda colonna ('1') per il momento è tutta a -1. In fase di inizializzazione, l'assembler provvederà a riempirla
+     * con l'indice del DOF di arricchimento corrispondente al dato DOF standard contenuto alla stessa riga, prima colonna.
+     * */
+
+    Eigen::MatrixXi pivot(blockMesh.Cell0DTotalNumber(), 2);
+    unsigned int num_Dirichlet_3D = 0;
+    unsigned int numDOF_3D_std = 0;
     for (unsigned int n = 0; n < blockMesh.Cell0DTotalNumber(); n++)
     {
-        double zCoordCurrentPoint = blockMesh.Cell0DCoordinateZ(n);
-        bool pointIsDirich = (zCoordCurrentPoint == 0.0) || (zCoordCurrentPoint == 1.0);
+        double zCoordinateOfCurrentPoint = blockMesh.Cell0DCoordinateZ(n);
+        bool point_is_dirichlet = (zCoordinateOfCurrentPoint == 0.0) || (zCoordinateOfCurrentPoint == 1.0);
 
-        if (pointIsDirich)
+        if (point_is_dirichlet)
         {
-            numDirich3D++;
-            pivot[n] = -numDirich3D;
+            num_Dirichlet_3D++;
+            pivot(n, 0) = -num_Dirichlet_3D;
+            pivot(n, 1) = -1;
         }
         else
         {
-            numNOTDirich3D++;
-            pivot[n] = numNOTDirich3D;
+            numDOF_3D_std++;
+            pivot(n, 0) = numDOF_3D_std;
+            pivot(n, 1) = -1;
         }
     }
+    // ***************************************************************************************************
 
-    // Construct the pivot vector for the fracture mesh
+
+    // COSTRUZIONE DEL VETTORE PIVOT PER LA MESH PER LA VARIABILE h **************************************
     Eigen::VectorXi fracturePivot(fractureMesh.Cell0DTotalNumber());
     for (unsigned int n = 0; n < fractureMesh.Cell0DTotalNumber(); n++)
     {
         fracturePivot[n] = fractureMesh.Cell0DMarker(n);
     }
+    // ***************************************************************************************************
+
 
     const double h = *max_element(std::begin(meshGeometricData.Cell3DsVolumes),
                                   std::end(meshGeometricData.Cell3DsVolumes));
@@ -321,17 +339,17 @@ void EllipticProblem::Run()
 
     assembler->setPhysicalParameters(params);
 
-    assembler->initialize(numDirich3D);
+    assembler->initialize(numDOF_3D_std, num_Dirichlet_3D);
 
     // Determine the effective number of DOFs (enrichment included).
     int numDofs3D = blockMesh.Cell0DTotalNumber();
-    numDofs3D -= numDirich3D;
+    numDofs3D -= num_Dirichlet_3D;
     unsigned int numEnrichements = assembler->getNumberEnrichments();
     numDofs3D += numEnrichements;
 
     // System matrices definition
     Eigen::SparseMatrix<double> AhD(numDofs3D, numDofs3D),
-                                AhD_dirich(numDofs3D, numDirich3D),
+                                AhD_dirich(numDofs3D, num_Dirichlet_3D),
                                 GhD,
                                 GhD_dirich;
     Eigen::VectorXd rightHandSide(numDofs3D);
@@ -339,15 +357,12 @@ void EllipticProblem::Run()
 
     if (numDofs3D > 0)
     {
-
         assembler->assemble_hD_hD(AhD, AhD_dirich, GhD, GhD_dirich, rightHandSide);
-
     }
 
     Gedim::Output::PrintStatusProgram("Assemble System");
 
-    // ***************************************************************************************
-    // Export AhD Matrix to .txt file
+    // EXPORT AHD MATRIX TO .txt FILE *********************************************************
     const string exportMatrFolder = exportFolder + "/Matrices";
     Gedim::Output::CreateFolder(exportMatrFolder);
 
@@ -372,20 +387,25 @@ void EllipticProblem::Run()
     // ***************************************************************************************
 
 
-    /// Solve
-    Gedim::Output::PrintGenericMessage("Solve...", true);
+    // SOLUZIONE DEL SISTEMA LINEARE *********************************************************
+    // Riscrivo AhD in un modo compatbile con il solver
+    Gedim::Eigen_SparseArray Ahd_gedim;
+    Ahd_gedim.SetSize(numDofs3D, numDofs3D);
+    Ahd_gedim.Triplets()
 
     if (numDofs3D > 0)
     {
-//        Gedim::Eigen_SparseArray Ahd_as_sparse_array =
+        Gedim::Eigen_CholeskySolver<> choleskySolver;
+        choleskySolver.Initialize(AhD,
+                                  rightHandSide,
+                                  solution);
 
-//        Gedim::Eigen_LUSolver<> choleskySolver;
-//        choleskySolver.Initialize(AhD,
-//                                  rightHandSide,
-//                                  solution);
-//        choleskySolver.Solve();
-//        cerr<< solution<< endl;
+        Gedim::Output::PrintGenericMessage("Solve...", true);
+        choleskySolver.Solve();
+        cerr << solution<< endl;
     }
+    // ***************************************************************************************
+
 
 //    Gedim::Output::PrintStatusProgram("Solve");
 }

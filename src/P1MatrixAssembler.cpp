@@ -22,7 +22,7 @@ P1MatrixAssembler::P1MatrixAssembler(Fracture3D* fracture,
 
 // Initialization of the assembler ********************************************************************************
 
-void P1MatrixAssembler::initialize(unsigned int numDirich)
+void P1MatrixAssembler::initialize(unsigned int numDOF_3D_std, unsigned int numDirich_3D)
 {
     // This method has to be called after setting all the meshes.
     bool incompleteSettings = (this->hD_Mesh == NULL) || (this->hF_Mesh == NULL);
@@ -34,7 +34,7 @@ void P1MatrixAssembler::initialize(unsigned int numDirich)
     }
 
     // Initializing the enrichment information
-    this->initializeEnrichmentInformation(numDirich);
+    this->initializeEnrichmentInformation(numDOF_3D_std, numDirich_3D);
 
     // Initializing the coupling for hD, PsiP variables
     //this->initialize_2D_3DCoupling(fractureBorder::positive);
@@ -140,14 +140,27 @@ void P1MatrixAssembler::initialize_2D_3DCoupling(fractureBorder type)
 
 }
 
-void P1MatrixAssembler::initializeEnrichmentInformation(unsigned int numDirich)
+void P1MatrixAssembler::initializeEnrichmentInformation(unsigned int numDOF_3D_std, unsigned int numDirich_3D)
 {
+    /*
+     * Questa funzione termina l'inizializzazione del vettore pivot per la variabile hD, legando i gradi di libertà standard
+     * al corrispondente grado di libertà arricchito. Il tutto viene fatto trovando dapprima le celle tagliate dal piano della
+     * frattura, per poi assegnare una numerazione ai DOF arricchiti sui punti di tali celle.
+     * */
+
     Gedim::MeshMatricesDAO* mesh3D = this->hD_Mesh;
+    Eigen::MatrixXi*       pivot3D = this->hD_Pivot;
 
-    // Part 1: Create boolean vectors of elements/nodes to enrich
 
+    // Vettore di 0,1 (false, true). Numero di righe = numero di celle. Ci dice una data cella è tagliata
+    // dalla frattura (quindi da arricchire) oppure no.
     this->toEnrich_elements = new Eigen::SparseMatrix<unsigned int>(mesh3D->Cell3DTotalNumber(), 1);
-    this->toEnrich_nodes    = new Eigen::SparseMatrix<unsigned int>(mesh3D->Cell0DTotalNumber()+1, 1);
+
+
+    // Ogni volta che troviamo una cella da arricchire, si aggiungono sempre esattamente 4 gradi di libertà di arricchimento.
+    // Per numerare i DOF arricchiti è dunque sufficiente 'appendere' in coda alla lista di DOF gli arricchimenti.
+    unsigned int global_counter_for_enriched_nodes = 0;
+
 
     for (unsigned int e = 0; e < mesh3D->Cell3DTotalNumber(); e++)
     {
@@ -155,43 +168,55 @@ void P1MatrixAssembler::initializeEnrichmentInformation(unsigned int numDirich)
 
         if (this->fracture->intersects(elementAsPolyhedron))
         {
-            // Set (e,f) entry of matrix to true, meaning element e is to enrich wrt fracture f.
+            // Setto l'elemento 'e' come da arricchire.
             this->toEnrich_elements->insert(e, 0) = 1;
 
-            // Retrieve the global Id of the verteces of element
-            unsigned int idNodo1, idNodo2, idNodo3, idNodo4;
+            // Recupero l'Id globale dei punti del tetraedro corrente.
+            unsigned int globIdNode1 = mesh3D->Cell3DVertex(e, 0),
+                         globIdNode2 = mesh3D->Cell3DVertex(e, 1),
+                         globIdNode3 = mesh3D->Cell3DVertex(e, 2),
+                         globIdNode4 = mesh3D->Cell3DVertex(e, 3);
 
-            idNodo1 = mesh3D->Cell3DVertex(e, 0);
-            idNodo2 = mesh3D->Cell3DVertex(e, 1);
-            idNodo3 = mesh3D->Cell3DVertex(e, 2);
-            idNodo4 = mesh3D->Cell3DVertex(e, 3);
+            // Calcolo l'indice del loro DOF di arricchimento.
+            unsigned int nn1_enr, nn2_enr, nn3_enr, nn4_enr;
 
-            this->toEnrich_nodes->coeffRef(idNodo1+1, 0) = 1;
-            this->toEnrich_nodes->coeffRef(idNodo2+1, 0) = 1;
-            this->toEnrich_nodes->coeffRef(idNodo3+1, 0) = 1;
-            this->toEnrich_nodes->coeffRef(idNodo4+1, 0) = 1;
+            bool node_1_still_to_be_numbered = (*pivot3D)(globIdNode1, 1) < 0,
+                 node_2_still_to_be_numbered = (*pivot3D)(globIdNode2, 1) < 0,
+                 node_3_still_to_be_numbered = (*pivot3D)(globIdNode3, 1) < 0,
+                 node_4_still_to_be_numbered = (*pivot3D)(globIdNode4, 1) < 0;
 
-        }
-    }
-
-    // Part 2 : Create variable stadardToEnriched.
-    for (unsigned int nn_std = 1; nn_std <= mesh3D->Cell0DTotalNumber(); nn_std++)
-    {
-        if (this->toEnrich_nodes->coeff(nn_std, 0))
-        {
-            unsigned int nn_enr = this->toEnrich_nodes->rows();
-
-            for (unsigned int index = 0; index < nn_std; index++)
+            if (node_1_still_to_be_numbered)
             {
-                nn_enr += this->toEnrich_nodes->coeff(index, 0);
+                global_counter_for_enriched_nodes++;
+                nn1_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
+                (*pivot3D)(globIdNode1, 1) = nn1_enr;
             }
 
-            this->standardToEnriched[nn_std] = nn_enr - numDirich;
+            if (node_2_still_to_be_numbered)
+            {
+                global_counter_for_enriched_nodes++;
+                nn2_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
+                (*pivot3D)(globIdNode2, 1) = nn2_enr;
+            }
+
+            if (node_3_still_to_be_numbered)
+            {
+                global_counter_for_enriched_nodes++;
+                nn3_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
+                (*pivot3D)(globIdNode3, 1) = nn3_enr;
+            }
+
+            if (node_4_still_to_be_numbered)
+            {
+                global_counter_for_enriched_nodes++;
+                nn4_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
+                (*pivot3D)(globIdNode4, 1) = nn4_enr;
+            }
+
         }
     }
 
-
-
+    this->num_enrichments = global_counter_for_enriched_nodes;
 }
 
 
@@ -203,7 +228,7 @@ void P1MatrixAssembler::setHD_Mesh(Gedim::MeshMatricesDAO *newHD_Mesh)
     hD_Mesh = newHD_Mesh;
 }
 
-void P1MatrixAssembler::setHD_Pivot(Eigen::VectorXi *newHD_Pivot)
+void P1MatrixAssembler::setHD_Pivot(Eigen::MatrixXi *newHD_Pivot)
 {
     hD_Pivot = newHD_Pivot;
 }
@@ -234,8 +259,7 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                                        Eigen::VectorXd&             rightHandSide)
 {
     Gedim::MeshMatricesDAO blockMesh = *this->hD_Mesh;
-    Eigen::VectorXi pivot = *this->hD_Pivot;
-    Eigen::SparseMatrix<unsigned int> toEnrich_nodes = *this->toEnrich_nodes;
+    Eigen::MatrixXi pivot = *this->hD_Pivot;
 
     for (unsigned int e = 0; e < blockMesh.Cell3DTotalNumber(); e++)
     {
@@ -243,146 +267,160 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
         for (unsigned short int i = 0; i < 4; i++)
         {
 
-            int ii_std = pivot[blockMesh.Cell3DVertex(e, i)];
+            int globIdNode_i = blockMesh.Cell3DVertex(e, i);
+            int ii_std = pivot(globIdNode_i, 0);
 
-            if (ii_std > 0) // Il nodo (e,i) è un DOF. Può essere da arricchire o no.
+            bool i_node_is_DOF = ii_std > 0;
+            bool i_node_is_to_enrich =  pivot(globIdNode_i, 1) > 0;
 
+            if (i_node_is_DOF)
             {
 
-                if (toEnrich_nodes.coeff(ii_std, 0)) // Il nodo (e,i) è da arricchire
+                if (i_node_is_to_enrich)
                 {
-                    unsigned int ii_enr = this->standardToEnriched[ii_std];
+                    unsigned int ii_enr = pivot(globIdNode_i, 1);
 
                     // Cycling on the trial function index
                     for (unsigned short int j = 0; j < 4; j++)
                     {
-                        int jj_std = pivot[blockMesh.Cell3DVertex(e, j)];
+                        int globIdNode_j = blockMesh.Cell3DVertex(e, j);
+                        int jj_std = pivot(globIdNode_j, 0);
 
-                        if (jj_std > 0)
+                        bool j_node_is_DOF = jj_std > 0;
+                        bool j_node_is_to_enrich =  pivot(globIdNode_j, 1) > 0;
+
+                        if (j_node_is_DOF)
                         {
 
-                            if (toEnrich_nodes.coeff(jj_std, 0))
+                            if (j_node_is_to_enrich)
                             {
-                                unsigned int jj_enr = this->standardToEnriched[jj_std];
+                                unsigned int jj_enr = pivot(globIdNode_j, 1);
 
-                                this->constructElement_AhD(AhD, ii_std, jj_std, ii_std, jj_std, e, integrationType::std_std);
+                                this->constructElement_AhD(AhD, ii_std, jj_std, globIdNode_i, globIdNode_j, e, integrationType::std_std);
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_std, ii_std, jj_std, e, integrationType::enr_std);
+                                this->constructElement_AhD(AhD, ii_enr, jj_std, globIdNode_i, globIdNode_j, e, integrationType::enr_std);
 
-                                this->constructElement_AhD(AhD, ii_std, jj_enr, ii_std, jj_std, e, integrationType::std_enr);
+                                this->constructElement_AhD(AhD, ii_std, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::std_enr);
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_enr, ii_std, jj_std, e, integrationType::enr_enr);
+                                this->constructElement_AhD(AhD, ii_enr, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::enr_enr);
 
                             }
                             else
                             {
-                                this->constructElement_AhD(AhD, ii_std, jj_std, ii_std, jj_std, e, integrationType::std_std);
+                                this->constructElement_AhD(AhD, ii_std, jj_std, globIdNode_i, globIdNode_j, e, integrationType::std_std);
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_std, ii_std, jj_std, e, integrationType::enr_std);
+                                this->constructElement_AhD(AhD, ii_enr, jj_std, globIdNode_i, globIdNode_j, e, integrationType::enr_std);
                             }
 
                         }
-                        else  // Il nodo (e,j) è di Dirichlet. Può essere da arricchire.
+                        else  // Il nodo (e,j) è di Dirichlet. Può ancora essere da arricchire e portare contributo coi suoi DOF enr.
                         {
+                            // this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
 
-//                            this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
+                            // this->constructElement_AhD(AhD_dirich, ii_enr, -jj_std, ii_std, -jj_std, e, integrationType::enr_std);
 
-//                            this->constructElement_AhD(AhD_dirich, ii_enr, -jj_std, ii_std, -jj_std, e, integrationType::enr_std);
-
-                            if (toEnrich_nodes.coeff(-jj_std, 0))
+                            if (j_node_is_to_enrich)
                             {
-                                unsigned int jj_enr = this->standardToEnriched[-jj_std];
+                                unsigned int jj_enr = pivot(globIdNode_j, 1);
 
-                                this->constructElement_AhD(AhD, ii_std, jj_enr, ii_std, -jj_std, e, integrationType::std_enr);
+                                this->constructElement_AhD(AhD, ii_std, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::std_enr);
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_enr, ii_std, -jj_std, e, integrationType::enr_enr);
+                                this->constructElement_AhD(AhD, ii_enr, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::enr_enr);
                             }
                         }
                     }
+
+                    // DA RIMETTERE UNA VOLTA RISOLTI GLI ERRORI! *****************************************************
 
                     //this->constructElement_Rhs(rightHandSide, ii_std, ii_std, e, integrationType::std);
 
                     //this->constructElement_Rhs(rightHandSide, ii_enr, ii_std, e, integrationType::enr);
 
-
+                    // *************************************************************************************************
                 }
+
                 else // Il nodo (e,i) NON è da arricchire.
                 {
                     for (unsigned short int j = 0; j < 4; j++)
                     {
-                        int jj_std = pivot[blockMesh.Cell3DVertex(e, j)];
+                        int globIdNode_j = blockMesh.Cell3DVertex(e, j);
+                        int jj_std = pivot(globIdNode_j, 0);
 
-                        if (jj_std > 0) // Il nodo (e,j) è un DOF
+                        bool j_node_is_DOF = jj_std > 0;
+                        bool j_node_is_to_enrich =  pivot(globIdNode_j, 1) > 0;
+
+                        if (j_node_is_DOF)
                         {
-
-                            if (toEnrich_nodes.coeff(jj_std, 0))
+                            if (j_node_is_to_enrich)
                             {
-                                unsigned int jj_enr = this->standardToEnriched[jj_std];
+                                unsigned int jj_enr = pivot(globIdNode_j, 1);
 
-                                if (ii_std == 3 && jj_std == 9)
-                                    std::cout << "Stop.";
+                                this->constructElement_AhD(AhD, ii_std, jj_std, globIdNode_i, globIdNode_j, e, integrationType::std_std);
 
-                                this->constructElement_AhD(AhD, ii_std, jj_std, ii_std, jj_std, e, integrationType::std_std);
-
-                                this->constructElement_AhD(AhD, ii_std, jj_enr, ii_std, jj_std, e, integrationType::std_enr);
+                                this->constructElement_AhD(AhD, ii_std, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::std_enr);
                             }
                             else
                             {
-                                this->constructElement_AhD(AhD, ii_std, jj_std, ii_std, jj_std, e, integrationType::std_std);
+                                this->constructElement_AhD(AhD, ii_std, jj_std, globIdNode_i, globIdNode_j, e, integrationType::std_std);
                             }
-
                         }
+
                         else // Il nodo (e,j) è di Dirichlet
                         {
-
                             // this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
 
-                            if (toEnrich_nodes.coeff(-jj_std, 0))
+                            if (j_node_is_to_enrich)
                             {
-                                unsigned int jj_enr = this->standardToEnriched[-jj_std];
+                                unsigned int jj_enr = pivot(globIdNode_j, 1);
 
-                                this->constructElement_AhD(AhD, ii_std, jj_enr, ii_std, -jj_std, e, integrationType::std_enr);
+                                this->constructElement_AhD(AhD, ii_std, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::std_enr);
                             }
 
                         }
 
                     }
 
-                    //this->constructElement_Rhs(rightHandSide, ii_std, ii_std, e, integrationType::std);
+                    // DA RIMETTERE UNA VOLTA RISOLTI GLI ERRORI! *****************************************************
+
+                    // this->constructElement_Rhs(rightHandSide, ii_std, ii_std, e, integrationType::std);
+
+                    // *************************************************************************************************
 
                 }
 
             }
 
             else // Il nodo (e,i) non è un DOF (è una condizione di Dirichlet). Può essere da arricchire o no.
-
             {
-
-                if (toEnrich_nodes.coeff(-ii_std, 0)) // ii node is to be enriched
+                if (i_node_is_to_enrich)
                 {
-                    unsigned int ii_enr = this->standardToEnriched[-ii_std];
+                    unsigned int ii_enr = pivot(globIdNode_i, 1);
 
                     // Cycling on the trial function index
                     for (unsigned short int j = 0; j < 4; j++)
                     {
-                        int jj_std = pivot[blockMesh.Cell3DVertex(e, j)];
+                        int globIdNode_j = blockMesh.Cell3DVertex(e, j);
+                        int jj_std = pivot(globIdNode_j, 0);
 
-                        if (jj_std > 0)
+                        bool j_node_is_DOF = jj_std > 0;
+                        bool j_node_is_to_enrich =  pivot(globIdNode_j, 1) > 0;
+
+                        if (j_node_is_DOF)
                         {
 
-                            if (toEnrich_nodes.coeff(jj_std, 0))
+                            if (j_node_is_to_enrich)
                             {
 
-                                unsigned int jj_enr = this->standardToEnriched[jj_std];
+                                unsigned int jj_enr = pivot(globIdNode_j, 1);
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_std, -ii_std, jj_std, e, integrationType::enr_std);
+                                this->constructElement_AhD(AhD, ii_enr, jj_std, globIdNode_i, globIdNode_j, e, integrationType::enr_std);
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_enr, -ii_std, jj_std, e, integrationType::enr_enr);
+                                this->constructElement_AhD(AhD, ii_enr, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::enr_enr);
 
                             }
                             else
                             {
-                                this->constructElement_AhD(AhD, ii_enr, jj_std, -ii_std, jj_std, e, integrationType::enr_std);
+                                this->constructElement_AhD(AhD, ii_enr, jj_std, globIdNode_i, globIdNode_j, e, integrationType::enr_std);
                             }
 
                         }
@@ -396,7 +434,12 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                         }
                     }
 
+                    // DA RIMETTERE UNA VOLTA RISOLTI GLI ERRORI! *****************************************************
+
                     //this->constructElement_Rhs(rightHandSide, ii_enr, -ii_std, e, integrationType::enr);
+
+                    // *************************************************************************************************
+
                 }
             }
         }
@@ -408,22 +451,21 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
 void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
                                               unsigned int row,
                                               unsigned int col,
-                                              unsigned int ii_std,
-                                              unsigned int jj_std,
+                                              unsigned int globIdNode_i,
+                                              unsigned int globIdNode_j,
                                              const unsigned int elementIndex,
                                              const integrationType type)
 {    
 
-    // I nodi nel vettore pivot sono organizzati con la numerazione di Matlab (perché lo zero non è negativo mè positivo, e quindi dà
-    // problemi nella gestione delle condizioni di Dirichlet, che si basa su nodi numerati negativamente e positivamente).
-    // Ora ritorniamo alla numerazione di C++
-    ii_std--;
-    jj_std--;
+    /*
+     * Gli indici dei DOF/nodi Dirich. sono numerati in pivot seguendo la seguente convenzione:
+     *      1,2,3,4,5...      per i DOF
+     *      -1,-2,-3,-4,-5... per le condizioni di Dirichlet
+     * Ora, voglio mettere il contributo del primo DOF nella prima riga della matrice di rigidezza, ovvero la riga 0.
+     * Di conseguenza, decremento gli indici per avere la loro posizione nella matrice.
+     * */
     row--;
     col--;
-
-    if (row == 3 && col == 9)
-        std::cout << "Stop.";
 
     std::cout << "Entered constructElement function." << std::endl;
 
@@ -433,19 +475,20 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
     // Identification of the current tetrahedron
     const Gedim::GeometryUtilities::Polyhedron element = meshUtilities->MeshCell3DToPolyhedron(mesh, elementIndex);
 
+    // Identification of "test node"'s coordinates
+    Eigen::Vector3d x_iCoord = mesh.Cell0DCoordinates(globIdNode_i);
+
+    // Identification of "trial node"'s coordinates
+    Eigen::Vector3d x_jCoord = mesh.Cell0DCoordinates(globIdNode_j);
+
     // Identification of the current test (i-th) basis function
     std::cout << "Starting determination of lagrange test basis coeffs..." << std::endl;
-    Eigen::Vector4d testLagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(ii_std), element);
+    Eigen::Vector4d testLagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(globIdNode_i), element);
 
     // Identification of the current trial (j-th) basis function
     std::cout << "Starting determination of lagrange trial basis coeffs..." << std::endl;
-    Eigen::Vector4d trialLagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(jj_std), element);
+    Eigen::Vector4d trialLagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(globIdNode_j), element);
 
-    // Identification of "test node"'s coordinates
-    Eigen::Vector3d x_iCoord = mesh.Cell0DCoordinates(ii_std);
-
-    // Identification of "trial node"'s coordinates
-    Eigen::Vector3d x_jCoord = mesh.Cell0DCoordinates(jj_std);
 
     // ******************************************************************************************************************************
     // Integration: different integration routines for the different combinations of DOF types that may arise.
@@ -648,19 +691,21 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
                 }
                 else                                         // the polyhedron is not a tetrahedron
                 {
-                    Gedim::MeshMatrices meshData;
-                    Gedim::MeshMatricesDAO mesh(meshData);
+                    Gedim::MeshMatrices aux_meshData;
+                    Gedim::MeshMatricesDAO aux_mesh(aux_meshData);
 
                     meshUtilities->CreateTetrahedralMesh(subPolyhedra.at(p).Vertices,
                                                          subPolyhedra.at(p).Edges,
                                                          subPolyhedra.at(p).Faces,
                                                          1,
-                                                         mesh,
+                                                         aux_mesh,
                                                          "Qpfezna");
 
-                    for (unsigned short int t = 0; t < mesh.Cell3DTotalNumber(); t++)
+
+
+                    for (unsigned short int t = 0; t < aux_mesh.Cell3DTotalNumber(); t++)
                     {
-                        subTetrahedra.push_back(meshUtilities->MeshCell3DToPolyhedron(mesh, t));
+                        subTetrahedra.push_back(meshUtilities->MeshCell3DToPolyhedron(aux_mesh, t));
                     }
 
                 }
@@ -718,10 +763,9 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
         break;
 
     }
+    // ******************************************************************************************************************************
 
     // Placing the result in the correct entrance of the stiffness matrix
-    // TODO: check whether .Triplet sums the contribution of integralValue or replaces it.
-
     M.coeffRef(row, col) += integralValue;
 
 }
@@ -828,16 +872,6 @@ void P1MatrixAssembler::constructElement_Rhs(Eigen::VectorXd&      rhs,
     default:
         break;
     }
-
-
-
-
-
-
-
-
-
-
 }
 
 

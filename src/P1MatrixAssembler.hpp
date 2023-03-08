@@ -38,12 +38,12 @@ private:
 
     // 3D Mesh and pivot vector
     Gedim::MeshMatricesDAO* hD_Mesh;
-    Eigen::VectorXi* hD_Pivot;
+    Eigen::MatrixXi* hD_Pivot;
 
     // Addtional boolean matrices for the enrichments and 2D/3D coupling
-    Eigen::SparseMatrix<unsigned int>* toEnrich_nodes;
     Eigen::SparseMatrix<unsigned int>* toEnrich_elements;
-    map<unsigned int, unsigned int>    standardToEnriched;  // maps standard indeces to index of their enrichment
+    int num_enrichments = -1;
+
     Eigen::SparseMatrix<unsigned int>* hD_PsiP_MeshIntersections;
     Eigen::SparseMatrix<unsigned int>* hD_PsiM_MeshIntersections;
     Eigen::SparseMatrix<unsigned int>* hD_PsiF_MeshIntersections;
@@ -81,7 +81,7 @@ public:
     // Setters ******************************************************************************
 
      void setHD_Mesh(Gedim::MeshMatricesDAO *newHD_Mesh);
-     void setHD_Pivot(Eigen::VectorXi *newHD_Pivot);
+     void setHD_Pivot(Eigen::MatrixXi *newHD_Pivot);
      void setHF_Mesh(Gedim::MeshMatricesDAO *newHF_Mesh);
      void setHF_Pivot(Eigen::VectorXi *newHF_Pivot);
      void setPhysicalParameters(PhysicalParameters *newPhysicalParameters);
@@ -90,7 +90,7 @@ public:
 
      // Construction of _2D_3D_intersections and enrichment information
 
-     void initialize(unsigned int numDirich);
+     void initialize(unsigned int numDOF, unsigned int numDirich);
 
 private:
 
@@ -174,9 +174,9 @@ public:
 
      void initialize_2D_3DCoupling(fractureBorder type);
 
-     void initializeEnrichmentInformation(unsigned int numDirich);
+     void initializeEnrichmentInformation(unsigned int numDOF_3D, unsigned int numDirich_3D);
 
-     inline unsigned int getNumberEnrichments() { return this->toEnrich_nodes->sum(); };
+     inline unsigned int getNumberEnrichments() { return this->num_enrichments; };
 
 
 
