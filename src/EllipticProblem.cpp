@@ -3,7 +3,7 @@
 #include "P1MatrixAssembler.hpp"
 
 #include <unsupported/Eigen/SparseExtra>
-
+#include <Eigen/SparseCholesky>
 
 #include "Configurations.hpp"
 #include "MeshMatrices.hpp"
@@ -13,8 +13,9 @@
 //#include "Eigen_SparseArray.hpp"
 //#include "Eigen_Array.hpp"
 //#include "Eigen_LUSolver.hpp"
-#include "Eigen_CholeskySolver.hpp"
+//#include "Eigen_CholeskySolver.hpp"
 #include "math.h"
+#include "discontinousTestProblem_1.h"
 
 #include "Quadrature_Gauss3D_Tetrahedron.hpp"
 #include "MapTetrahedron.hpp"
@@ -136,7 +137,7 @@ EllipticProblem::~EllipticProblem()
 }
 // ***************************************************************************
 
-void EllipticProblem::Run()
+result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
 {
 
     // CONFIGURAZIONE INIZIALE *****************************************************************************
@@ -223,11 +224,11 @@ void EllipticProblem::Run()
     meshUtilities.CreateTetrahedralMesh(block.Vertices,
                                         block.Edges,
                                         block.Faces,
-                                        config.MeshMaximumTetrahedronVolume(),
+                                        max_volume_tetrahedra,
                                         blockMesh,
                                         "Qpqfenza");
 
-
+// al posto di max_volume_tetrahedra: config.MeshMaximumTetrahedronVolume().
 
     // Export the block mesh
     meshUtilities.ExportMeshToVTU(blockMesh,
@@ -277,28 +278,83 @@ void EllipticProblem::Run()
      * */
 
     Eigen::MatrixXi pivot(blockMesh.Cell0DTotalNumber(), 2);
+    std::vector<unsigned int> Neumann_triangles;
     unsigned int num_Dirichlet_3D = 0;
     unsigned int numDOF_3D_std = 0;
-    for (unsigned int n = 0; n < blockMesh.Cell0DTotalNumber(); n++)
+    for (unsigned int glob_id_point = 0; glob_id_point < blockMesh.Cell0DTotalNumber(); glob_id_point++)
     {
-        double zCoordinateOfCurrentPoint = blockMesh.Cell0DCoordinateZ(n);
-        bool point_is_dirichlet = (zCoordinateOfCurrentPoint == 0.0) || (zCoordinateOfCurrentPoint == 1.0);
+        Eigen::Vector3d point = blockMesh.Cell0DCoordinates(glob_id_point);
+        double x = point.x(),
+               y = point.y(),
+               z = point.z();
+
+        bool point_is_dirichlet = (z == 0.0) || (z == 1.0);
 
         if (point_is_dirichlet)
         {
+            blockMesh.Cell0DSetMarker(glob_id_point, 2 * num_Dirichlet_3D + 1);
             num_Dirichlet_3D++;
-            pivot(n, 0) = -num_Dirichlet_3D;
-            pivot(n, 1) = -1;
+            pivot(glob_id_point, 0) = -num_Dirichlet_3D;
+            pivot(glob_id_point, 1) = -1;
         }
         else
         {
+            blockMesh.Cell0DSetMarker(glob_id_point, 0);
             numDOF_3D_std++;
-            pivot(n, 0) = numDOF_3D_std;
-            pivot(n, 1) = -1;
+            pivot(glob_id_point, 0) = numDOF_3D_std;
+            pivot(glob_id_point, 1) = -1;
+        }
+    }
+
+    // Costruzione della struttura dati per i triangoli di Neumann
+    for (unsigned int glob_id_triangle; glob_id_triangle < blockMesh.Cell2DTotalNumber(); glob_id_triangle++)
+    {
+        blockMesh.Cell2DSetMarker(glob_id_triangle, -1);
+
+        std::vector<unsigned int> vertices_global_IDs = blockMesh.Cell2DVertices(glob_id_triangle);
+
+        Eigen::Vector3d point1 = blockMesh.Cell0DCoordinates(vertices_global_IDs.at(0)),
+                        point2 = blockMesh.Cell0DCoordinates(vertices_global_IDs.at(1)),
+                        point3 = blockMesh.Cell0DCoordinates(vertices_global_IDs.at(2));
+
+        double x1 = point1.x(), x2 = point2.x(), x3 = point3.x(),
+               y1 = point1.y(), y2 = point2.y(), y3 = point3.y();
+
+        bool triangle_lies_on_cube_face_with_marker_2  = (x1 == 0.0 && x2 == 0.0 && x3 == 0.0);
+        bool triangle_lies_on_cube_face_with_marker_4  = (x1 == 1.0 && x2 == 1.0 && x3 == 1.0);
+        bool triangle_lies_on_cube_face_with_marker_6  = (y1 == 0.0 && y2 == 0.0 && y3 == 0.0);
+        bool triangle_lies_on_cube_face_with_marker_8  = (y1 == 1.0 && y2 == 1.0 && y3 == 1.0);
+
+
+        // Faccia di Neumann con marker 2: {x=0}
+        if (triangle_lies_on_cube_face_with_marker_2)
+        {
+            blockMesh.Cell2DSetMarker(glob_id_triangle, 2);
+            Neumann_triangles.push_back(glob_id_triangle);
+        }
+
+        // Faccia di Neumann con marker 4: {x=1}
+        if (triangle_lies_on_cube_face_with_marker_4)
+        {
+            blockMesh.Cell2DSetMarker(glob_id_triangle, 4);
+            Neumann_triangles.push_back(glob_id_triangle);
+        }
+
+        // Faccia di Neumann con marker 6: {y=0}
+        if (triangle_lies_on_cube_face_with_marker_6)
+        {
+            blockMesh.Cell2DSetMarker(glob_id_triangle, 6);
+            Neumann_triangles.push_back(glob_id_triangle);
+        }
+
+        // Faccia di Neumann con marker 8: {y=1}
+        if (triangle_lies_on_cube_face_with_marker_8)
+        {
+            blockMesh.Cell2DSetMarker(glob_id_triangle, 8);
+            Neumann_triangles.push_back(glob_id_triangle);
         }
     }
     // ***************************************************************************************************
-
 
     // COSTRUZIONE DEL VETTORE PIVOT PER LA MESH PER LA VARIABILE h **************************************
     Eigen::VectorXi fracturePivot(fractureMesh.Cell0DTotalNumber());
@@ -333,18 +389,18 @@ void EllipticProblem::Run()
                                                          &meshUtilities);
     assembler->setHD_Mesh(&blockMesh);
     assembler->setHF_Mesh(&fractureMesh);
-
     assembler->setHD_Pivot(&pivot);
+    assembler->setHD_NeumannInfo(&Neumann_triangles);
     assembler->setHF_Pivot(&fracturePivot);
-
     assembler->setPhysicalParameters(params);
-
     assembler->initialize(numDOF_3D_std, num_Dirichlet_3D);
 
     // Determine the effective number of DOFs (enrichment included).
-    int numDofs3D = blockMesh.Cell0DTotalNumber();
-    numDofs3D -= num_Dirichlet_3D;
     unsigned int numEnrichements = assembler->getNumberEnrichments();
+    assert(numEnrichements != -1);
+
+    unsigned int numDofs3D = blockMesh.Cell0DTotalNumber();
+    numDofs3D -= num_Dirichlet_3D;
     numDofs3D += numEnrichements;
 
     // System matrices definition
@@ -353,16 +409,21 @@ void EllipticProblem::Run()
                                 GhD,
                                 GhD_dirich;
     Eigen::VectorXd rightHandSide(numDofs3D);
-    Eigen::VectorXd solution(numDofs3D);
+    Eigen::VectorXd solution(numDofs3D), exactSolution;
+
+    // Per evitare che ci siano valori inizializzati a 'nan'.
+    rightHandSide.setZero();
+
+    Gedim::Output::PrintStatusProgram("Assemble System");
 
     if (numDofs3D > 0)
     {
         assembler->assemble_hD_hD(AhD, AhD_dirich, GhD, GhD_dirich, rightHandSide);
+        assembler->addNeumann(rightHandSide);
     }
 
-    Gedim::Output::PrintStatusProgram("Assemble System");
 
-    // EXPORT AHD MATRIX TO .txt FILE *********************************************************
+    // EXPORT AHD MATRIX TO .txt FILE and SAVE IN TRIPLETS FORM *********************************
     const string exportMatrFolder = exportFolder + "/Matrices";
     Gedim::Output::CreateFolder(exportMatrFolder);
 
@@ -372,6 +433,7 @@ void EllipticProblem::Run()
     if (fw.is_open())
     {
         fw << "\n\n";
+
         Eigen::MatrixXd AhD_dense = AhD.toDense();
         for(unsigned int i = 0; i < AhD_dense.rows(); i++)
         {
@@ -379,35 +441,50 @@ void EllipticProblem::Run()
             {
                 fw << AhD_dense(i,j) << " ";
             }
+
             fw << "\n";
         }
+
         fw.close();
     }
     else std::cout << "Problem with opening file";
+
     // ***************************************************************************************
+
 
 
     // SOLUZIONE DEL SISTEMA LINEARE *********************************************************
-    // Riscrivo AhD in un modo compatbile con il solver
-    Gedim::Eigen_SparseArray Ahd_gedim;
-    Ahd_gedim.SetSize(numDofs3D, numDofs3D);
-    Ahd_gedim.Triplets()
 
     if (numDofs3D > 0)
     {
-        Gedim::Eigen_CholeskySolver<> choleskySolver;
-        choleskySolver.Initialize(AhD,
-                                  rightHandSide,
-                                  solution);
+        SimplicialLLT<Eigen::SparseMatrix<double>> choleskySolver;
 
-        Gedim::Output::PrintGenericMessage("Solve...", true);
-        choleskySolver.Solve();
-        cerr << solution<< endl;
+        choleskySolver.compute(AhD);
+
+        if(choleskySolver.info() != Success)
+          throw std::runtime_error("The Cholesky decomposition has failed.");
+
+        solution = choleskySolver.solve(rightHandSide);
+
+        exactSolution = DiscontinousTestProblem_1::exactSolution(blockMesh.Cell0DsCoordinates(),
+                                                                    numDOF_3D_std,
+                                                                    pivot,
+                                                                    fractureNetwork.at(0));
+
+        if(choleskySolver.info() != Success)
+          throw std::runtime_error("The solution of the linear system has failed.");
+
     }
     // ***************************************************************************************
 
+    Gedim::Output::PrintStatusProgram("Solve");
 
-//    Gedim::Output::PrintStatusProgram("Solve");
+    result_for_error_estimate result;
+    result.solution = solution(seq(0, numDOF_3D_std - 1));
+    result.exactSolution = exactSolution;
+    result.h = h;
+
+    return result;
 }
 
 }

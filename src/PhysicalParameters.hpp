@@ -4,6 +4,7 @@
 #include "GeometryUtilities.hpp"
 #include "Utilities.hpp"
 #include "Fracture3D.hpp"
+#include "discontinousTestProblem_1.h"
 
 namespace XFEM_3D {
 
@@ -28,17 +29,7 @@ public:
     void setNormalTransmissivityFracture(double newNormalTransmissivityFracture);
     double getNormalTransmissivityFracture() const;
 
-    inline double forcingTerm(const Eigen::Vector3d pointCoords, Fracture3D fracture)
-    {
-        double x = pointCoords[0], y = pointCoords[1], z = pointCoords[2];
-
-        if (Utilities::signedDistanceFunction(pointCoords, fracture) >= 0)
-            return -32*( x*y*(1-x)*(1-y) + x*z*(1-x)*(1-z) + y*z*(1-y)*(1-z) );
-
-        else
-            return  32*( x*y*(1-x)*(1-y) + x*z*(1-x)*(1-z) + y*z*(1-y)*(1-z) );
-
-    };
+    double forcingTerm(Eigen::Vector3d pointCoords, Fracture3D fracture);
 };
 
 }

@@ -233,6 +233,11 @@ void P1MatrixAssembler::setHD_Pivot(Eigen::MatrixXi *newHD_Pivot)
     hD_Pivot = newHD_Pivot;
 }
 
+void P1MatrixAssembler::setHD_NeumannInfo(std::vector<unsigned int> *neumannInfo)
+{
+    this->neumannInfo = neumannInfo;
+}
+
 void P1MatrixAssembler::setHF_Mesh(Gedim::MeshMatricesDAO *newHF_Mesh)
 {
     hF_Mesh = newHF_Mesh;
@@ -330,13 +335,11 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                         }
                     }
 
-                    // DA RIMETTERE UNA VOLTA RISOLTI GLI ERRORI! *****************************************************
+                    // Il nodo i è da arricchire. Quindi, costruiamo il RHS sia per il DOF std che per il DOF enr.
 
-                    //this->constructElement_Rhs(rightHandSide, ii_std, ii_std, e, integrationType::std);
+                    this->constructElement_Rhs(rightHandSide, ii_std, globIdNode_i, e, integrationType::std);
+                    this->constructElement_Rhs(rightHandSide, ii_enr, globIdNode_i, e, integrationType::enr);
 
-                    //this->constructElement_Rhs(rightHandSide, ii_enr, ii_std, e, integrationType::enr);
-
-                    // *************************************************************************************************
                 }
 
                 else // Il nodo (e,i) NON è da arricchire.
@@ -380,11 +383,8 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
 
                     }
 
-                    // DA RIMETTERE UNA VOLTA RISOLTI GLI ERRORI! *****************************************************
-
-                    // this->constructElement_Rhs(rightHandSide, ii_std, ii_std, e, integrationType::std);
-
-                    // *************************************************************************************************
+                    // Il nodo i non è da arricchire. Costruiamo il RHS solo sul DOF std.
+                    this->constructElement_Rhs(rightHandSide, ii_std, globIdNode_i, e, integrationType::std);
 
                 }
 
@@ -430,15 +430,11 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
 
                             //  this->constructElement_AhD(AhD_dirich, ii_enr, -jj_std, -ii_std, -jj_std, e, integrationType::enr_std);
 
-
                         }
                     }
 
-                    // DA RIMETTERE UNA VOLTA RISOLTI GLI ERRORI! *****************************************************
-
-                    //this->constructElement_Rhs(rightHandSide, ii_enr, -ii_std, e, integrationType::enr);
-
-                    // *************************************************************************************************
+                    // Il nodo i ha una condizione di Dirichlet ma è da arricchire. Costruiamo il RHS solo sul DOF enr.
+                    this->constructElement_Rhs(rightHandSide, ii_enr, globIdNode_i, e, integrationType::enr);
 
                 }
             }
@@ -467,8 +463,9 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
     row--;
     col--;
 
+    #ifdef __DEBUG__
     std::cout << "Entered constructElement function." << std::endl;
-
+    #endif
     // We are assembling the A^hD matrix, therefore we use the mesh for the hD variable.
     Gedim::MeshMatricesDAO mesh = *this->hD_Mesh;
 
@@ -482,11 +479,15 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
     Eigen::Vector3d x_jCoord = mesh.Cell0DCoordinates(globIdNode_j);
 
     // Identification of the current test (i-th) basis function
+    #ifdef __DEBUG__
     std::cout << "Starting determination of lagrange test basis coeffs..." << std::endl;
+    #endif
     Eigen::Vector4d testLagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(globIdNode_i), element);
 
     // Identification of the current trial (j-th) basis function
+    #ifdef __DEBUG__
     std::cout << "Starting determination of lagrange trial basis coeffs..." << std::endl;
+    #endif
     Eigen::Vector4d trialLagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(globIdNode_j), element);
 
 
@@ -498,9 +499,9 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
 
     case integrationType::std_std:
     {
-
+        #ifdef __DEBUG__
         std::cout << "Starting a std_std integration... position in matrix: " << row << ", " << col << "\n" << std::endl;
-
+        #endif
 
         // Preparation of the quadrature formula
         const unsigned int quadratureOrder = 2;
@@ -540,9 +541,9 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
 
     case integrationType::enr_std:
     {
-
+        #ifdef __DEBUG__
         std::cout << "Starting a enr_std integration... position in matrix: " << row << ", " << col << "\n" << std::endl;
-
+        #endif
 
         // Preparation of the quadrature formula
 
@@ -584,8 +585,9 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
 
     case integrationType::std_enr:
     {
+        #ifdef __DEBUG__
         std::cout << "Starting a std_enr integration... position in matrix: " << row << ", " << col << "\n" << std::endl;
-
+        #endif
 
         // Preparation of the quadrature formula
 
@@ -627,9 +629,9 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
 
     case integrationType::enr_enr:
     {
-
+        #ifdef __DEBUG__
         std::cout << "Starting a enr_enr integration...position in matrix: " << row << ", " << col << "\n" << std::endl;
-
+        #endif
 
         // Auxiliary geometric variables
         const std::vector<std::vector<bool>> polyhedronFaceEdgeDirections = geometryUtilities->PolyhedronFaceEdgeDirections(element.Vertices,
@@ -771,11 +773,20 @@ void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
 }
 
 void P1MatrixAssembler::constructElement_Rhs(Eigen::VectorXd&      rhs,
-                                             const unsigned int    i,
-                                             const unsigned int    ii_std,
+                                             unsigned int          row,
+                                             const unsigned int    globIdNode_i,
                                              const unsigned int    elementIndex,
                                              const integrationType type)
 {
+    /*
+     * Gli indici dei DOF/nodi Dirich. sono numerati in pivot seguendo la seguente convenzione:
+     *      1,2,3,4,5...      per i DOF
+     *      -1,-2,-3,-4,-5... per le condizioni di Dirichlet
+     * Ora, voglio mettere il contributo del primo DOF nella prima riga della matrice di rigidezza, ovvero la riga 0.
+     * Di conseguenza, decremento gli indici per avere la loro posizione nella matrice.
+     * */
+    row--;
+
     // The RHS is non zero only for the last row of the block linear system. Therefore, we use the hD mesh.
     Gedim::MeshMatricesDAO mesh = *this->hD_Mesh;
 
@@ -783,10 +794,10 @@ void P1MatrixAssembler::constructElement_Rhs(Eigen::VectorXd&      rhs,
     const Gedim::GeometryUtilities::Polyhedron element = meshUtilities->MeshCell3DToPolyhedron(mesh, elementIndex);
 
     // Identification of the current (i-th) basis function
-    Eigen::Vector4d lagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(ii_std), element);
+    Eigen::Vector4d lagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(globIdNode_i), element);
 
     // Identification of the current node coordinates
-    Eigen::Vector3d x_iCoord = mesh.Cell0DCoordinates(ii_std);
+    Eigen::Vector3d x_iCoord = mesh.Cell0DCoordinates(globIdNode_i);
 
     switch (type) {
     case integrationType::std:
@@ -824,7 +835,7 @@ void P1MatrixAssembler::constructElement_Rhs(Eigen::VectorXd&      rhs,
         }
 
 
-        rhs(i) += integralValue;
+        rhs(row) += integralValue;
 
         break;
 
@@ -865,7 +876,7 @@ void P1MatrixAssembler::constructElement_Rhs(Eigen::VectorXd&      rhs,
         }
 
 
-        rhs(i) += integralValue;
+        rhs(row) += integralValue;
 
         break;
     }
@@ -910,6 +921,46 @@ void P1MatrixAssembler::assemble_h_h(Eigen::SparseMatrix<double>& Ah,
             }
         }
     }
+}
+
+void P1MatrixAssembler::addNeumann(Eigen::VectorXd &rhs)
+{
+    Gedim::MeshMatricesDAO mesh = *this->hD_Mesh;
+    Eigen::MatrixXi pivot = *this->hD_Pivot;
+
+    for (unsigned int t = 0; t < this->neumannInfo->size(); t++)
+    {
+        unsigned int triangle_glob_id = this->neumannInfo->at(t);
+        unsigned int marker = mesh.Cell2DMarker(triangle_glob_id);
+        std::vector<unsigned int> trianglePoints_Ids = mesh.Cell2DVertices(triangle_glob_id);
+        Eigen::MatrixXd trianglePoints_coordinates = mesh.Cell2DVerticesCoordinates(triangle_glob_id);
+
+        Eigen::MatrixXd rotatedTo2D_TrianglePoints_coordinates = this->geometryUtilities->RotatePointsFrom3DTo2D(trianglePoints_coordinates,
+                                                                                                                 this->geometryUtilities->PlaneRotationMatrix(this->geometryUtilities->PolygonNormal(trianglePoints_coordinates)));
+
+        double triangle_area = this->geometryUtilities->PolygonArea(rotatedTo2D_TrianglePoints_coordinates);
+
+        double averaged_gN = DiscontinousTestProblem_1::g_Neumann_triangle_averaged(trianglePoints_Ids,
+                                                                                    marker,
+                                                                                    mesh,
+                                                                                    this->fracture);
+
+        for (unsigned int i = 0; i < 3; i++)
+        {
+            unsigned int current_point_id = trianglePoints_Ids.at(i);
+            int ii = pivot(current_point_id, 0);
+
+            if (ii > 0)
+                rhs(ii) += (1 / 3) * averaged_gN * triangle_area;
+        }
+    }
+
+
+
+
+
+
+
 }
 
 

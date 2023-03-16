@@ -10,6 +10,15 @@
 namespace XFEM_3D
 {
 
+  typedef struct {
+
+    Eigen::VectorXd solution;
+    Eigen::VectorXd exactSolution;
+    double h;
+
+  } result_for_error_estimate;
+
+
   class EllipticProblem_ProgramConfiguration final
   {
     public:
@@ -38,7 +47,7 @@ namespace XFEM_3D
       ~EllipticProblem();
 
 
-      void Run();
+      result_for_error_estimate Run(double max_volume_tetrahedra);
 
       void RunTestXFEM();
 

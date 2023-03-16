@@ -1,8 +1,8 @@
 #ifndef XFEMPOISSONASSEMBLER_HPP
 #define XFEMPOISSONASSEMBLER_HPP
 
-#include "Eigen_Array.hpp"
-#include "Eigen_SparseArray.hpp"
+//#include "Eigen_Array.hpp"
+//#include "Eigen_SparseArray.hpp"
 #include "MeshMatricesDAO.hpp"
 #include "GeometryUtilities.hpp"
 #include "MeshUtilities.hpp"
@@ -39,6 +39,7 @@ private:
     // 3D Mesh and pivot vector
     Gedim::MeshMatricesDAO* hD_Mesh;
     Eigen::MatrixXi* hD_Pivot;
+    std::vector<unsigned int>* neumannInfo;
 
     // Addtional boolean matrices for the enrichments and 2D/3D coupling
     Eigen::SparseMatrix<unsigned int>* toEnrich_elements;
@@ -82,6 +83,7 @@ public:
 
      void setHD_Mesh(Gedim::MeshMatricesDAO *newHD_Mesh);
      void setHD_Pivot(Eigen::MatrixXi *newHD_Pivot);
+     void setHD_NeumannInfo(std::vector<unsigned int>* neumannInfo);
      void setHF_Mesh(Gedim::MeshMatricesDAO *newHF_Mesh);
      void setHF_Pivot(Eigen::VectorXi *newHF_Pivot);
      void setPhysicalParameters(PhysicalParameters *newPhysicalParameters);
@@ -97,18 +99,19 @@ private:
      // Right hand side *******************************************************************
 
      void constructElement_Rhs(Eigen::VectorXd&      rhs,
-                               const unsigned int    i,
-                               const unsigned int    ii_std,
+                               unsigned int          row,
+                               const unsigned int    globIdNode_i,
                                const unsigned int    elementIndex,
                                const integrationType type);
+
 
      // PDE Discretization *****************************************************************
      // hD - hD
      void constructElement_AhD(Eigen::SparseMatrix<double>& M,
                                const unsigned int row,
                                const unsigned int col,
-                               const unsigned int ii_std,
-                               const unsigned int jj_std,
+                               const unsigned int globIdNode_i,
+                               const unsigned int globIdNode_j,
                                const unsigned int elementIndex,
                                const integrationType type);
 
@@ -167,6 +170,8 @@ public:
                            Eigen::SparseMatrix<double>& GPsiPlus_dirich,
                            Eigen::SparseMatrix<double>& GPsiMinus,
                            Eigen::SparseMatrix<double>& GPsiMinus_dirich);
+
+     void addNeumann(Eigen::VectorXd& rhs);
 
 
     // **************************************************************************************

@@ -10,16 +10,15 @@ namespace Utilities
     {
         Eigen::Vector3d normal = fracture.getNormal();
         Eigen::Vector3d x = fracture.getOrigin();
-        double a = normal(0);
-        double b = normal(1);
-        double c = normal(2);
+        double a = normal(0),
+               b = normal(1),
+               c = normal(2);
         double d = - a*x(0) - b*x(1) - c*x(2);
         double res;
 
         res = (a*point(0) + b*point(1) + c*point(2) + d) / (sqrt(a*a + b*b + c*c));
 
         return res;
-
     }
 
     int heaviside (double input)
@@ -183,6 +182,7 @@ namespace Utilities
         grad << coeff(0), coeff(1);
         return grad;
     }
+
 
 
 
