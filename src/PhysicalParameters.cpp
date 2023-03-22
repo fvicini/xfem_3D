@@ -54,4 +54,15 @@ double PhysicalParameters::forcingTerm(Eigen::Vector3d pointCoords, Fracture3D f
     {
         return DiscontinousTestProblem_1::forcingTerm(pointCoords, fracture);
     }
+
+double PhysicalParameters::forcingTermAveragedOnTetrahedron(Eigen::MatrixXd tetrahedronVertices, Fracture3D fracture)
+{
+    double res = 0.0;
+    for(unsigned int i = 0; i < 3; i++)
+    {
+        res += this->forcingTerm(tetrahedronVertices.col(i), fracture);
+    }
+    return res / 3;
+}
+
 }

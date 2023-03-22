@@ -25,12 +25,12 @@ enum struct integrationType
     enr   // for right hand side
 };
 
-enum struct fractureBorder
+typedef struct
 {
-    positive,
-    negative,
-    fracture
-};
+    Eigen::Matrix3d JJ;
+    double abs_detJ;
+
+} MappingFromReferenceTetrahedronInfo;
 
 class P1MatrixAssembler
 {
@@ -72,12 +72,6 @@ public:
                         Gedim::GeometryUtilities* geometryUtilities,
                         Gedim::MeshUtilities* meshutilities);
 
-    // Assemblers
-
-    // This function is a public wrapper function for all the "assemble" functions
-    void assembleXFEM();
-
-
 
     // Setters ******************************************************************************
 
@@ -96,24 +90,9 @@ public:
 
 private:
 
-     // Right hand side *******************************************************************
-
-     void constructElement_Rhs(Eigen::VectorXd&      rhs,
-                               unsigned int          row,
-                               const unsigned int    globIdNode_i,
-                               const unsigned int    elementIndex,
-                               const integrationType type);
 
 
      // PDE Discretization *****************************************************************
-     // hD - hD
-     void constructElement_AhD(Eigen::SparseMatrix<double>& M,
-                               const unsigned int row,
-                               const unsigned int col,
-                               const unsigned int globIdNode_i,
-                               const unsigned int globIdNode_j,
-                               const unsigned int elementIndex,
-                               const integrationType type);
 
      // h - h
      void constructElement_AhF(Eigen::SparseMatrix<double>& M,
@@ -131,9 +110,11 @@ private:
      // TODO...
 
      // **************************************************************************************
+
+     MappingFromReferenceTetrahedronInfo MapFromReferenceTetrahedron(const Gedim::GeometryUtilities::Polyhedron element);
+
 public:
 
-     // Funzioni assemble: queste saranno chiamate dentro assembleXFEM.
      void assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                          Eigen::SparseMatrix<double>& AhD_dirich,
                          Eigen::SparseMatrix<double>& GhD,
@@ -175,9 +156,6 @@ public:
 
 
     // **************************************************************************************
-
-
-     void initialize_2D_3DCoupling(fractureBorder type);
 
      void initializeEnrichmentInformation(unsigned int numDOF_3D, unsigned int numDirich_3D);
 

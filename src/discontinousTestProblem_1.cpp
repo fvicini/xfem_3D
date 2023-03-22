@@ -62,10 +62,6 @@ Eigen::Vector3d exactSolutionGradient(Eigen::Vector3d point, Fracture3D* fractur
     }
 
     return gradient;
-
-
-
-
 }
 
 
@@ -78,8 +74,8 @@ double forcingTerm(Eigen::Vector3d pointCoords, Fracture3D fracture)
 
     else
         return  32*( x*y*(1-x)*(1-y) + x*z*(1-x)*(1-z) + y*z*(1-y)*(1-z) );
-
 }
+
 
 double g_Neumann_triangle_averaged(std::vector<unsigned int> vertices_global_IDs,
                                    unsigned int neumannBorderMarker,
@@ -96,28 +92,28 @@ double g_Neumann_triangle_averaged(std::vector<unsigned int> vertices_global_IDs
                     solutionGradient_atPoint3 = exactSolutionGradient(point3, fracture);
 
     double averaged_gN, gN1, gN2, gN3;
-    Eigen::Vector3d cubeFaceNormal;
+    Eigen::Vector3d externalCubeFaceNormal;
 
     switch (neumannBorderMarker) {
     case 2: // {x=0}
-        cubeFaceNormal << -1, 0, 0;
+        externalCubeFaceNormal << -1, 0, 0;
         break;
     case 4: // {x=1}
-        cubeFaceNormal << 1, 0, 0;
+        externalCubeFaceNormal << 1, 0, 0;
         break;
     case 6: // {y=0}
-        cubeFaceNormal << 0, -1, 0;
+        externalCubeFaceNormal << 0, -1, 0;
         break;
     case 8: // {y=1}
-        cubeFaceNormal << 0, 1, 0;
+        externalCubeFaceNormal << 0, 1, 0;
         break;
     default:
         break;
     }
 
-    gN1 = solutionGradient_atPoint1.transpose() * cubeFaceNormal;
-    gN2 = solutionGradient_atPoint2.transpose() * cubeFaceNormal;
-    gN3 = solutionGradient_atPoint3.transpose() * cubeFaceNormal;
+    gN1 = solutionGradient_atPoint1.transpose() * externalCubeFaceNormal;
+    gN2 = solutionGradient_atPoint2.transpose() * externalCubeFaceNormal;
+    gN3 = solutionGradient_atPoint3.transpose() * externalCubeFaceNormal;
 
     averaged_gN = (1 / 3) * (gN1 + gN2 + gN3);
 

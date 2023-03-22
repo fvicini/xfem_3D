@@ -30,6 +30,8 @@ public:
     double getNormalTransmissivityFracture() const;
 
     double forcingTerm(Eigen::Vector3d pointCoords, Fracture3D fracture);
+
+    double forcingTermAveragedOnTetrahedron(Eigen::MatrixXd tetrahedronVertices, Fracture3D fracture);
 };
 
 }

@@ -43,89 +43,7 @@ EllipticProblem_ProgramConfiguration::EllipticProblem_ProgramConfiguration()
                                        "Mesh 3D maximum tetrahedron volume (Default: 0.1)");
 }
 
-// ***************************************************************************
 
-void EllipticProblem::TestQuadrature(const Gedim::GeometryUtilities &geometryUtilities) const
-{
-    string exportFolder = "./TEST_QUAD";
-    Gedim::Output::CreateFolder(exportFolder);
-
-    Eigen::MatrixXd vertices;
-    vertices.setZero(3, 4);
-    vertices.row(0) << +5.0, +0.0, -8.0, +0.0;
-    vertices.row(1) << -5.0, +8.0, -4.0, +0.0;
-    vertices.row(2) << +0.0, +0.0, +3.0, +12.0;
-
-    {
-        const Gedim::GeometryUtilities::Polyhedron tet = geometryUtilities.CreateTetrahedronWithVertices(vertices.col(0),
-                                                                                                         vertices.col(1),
-                                                                                                         vertices.col(2),
-                                                                                                         vertices.col(3));
-        Gedim::VTKUtilities vtkUtilities;
-        vtkUtilities.AddPolyhedron(tet.Vertices,
-                                   tet.Edges,
-                                   tet.Faces
-                                   );
-        vtkUtilities.Export(exportFolder +
-                            "/TET_" +
-                            ".vtu");
-    }
-
-    {
-        const Gedim::GeometryUtilities::Polyhedron tet = geometryUtilities.CreateTetrahedronWithVertices(Eigen::Vector3d(0.0, 0.0, 0.0),
-                                                                                                         Eigen::Vector3d(1.0, 0.0, 0.0),
-                                                                                                         Eigen::Vector3d(0.0, 1.0, 0.0),
-                                                                                                         Eigen::Vector3d(0.0, 0.0, 1.0));
-        Gedim::VTKUtilities vtkUtilities;
-        vtkUtilities.AddPolyhedron(tet.Vertices,
-                                   tet.Edges,
-                                   tet.Faces
-                                   );
-        vtkUtilities.Export(exportFolder +
-                            "/TET_REF_" +
-                            ".vtu");
-    }
-
-
-    const unsigned int quadratureOrder = 2;
-    Eigen::MatrixXd quadraturePointsRef;
-    Eigen::VectorXd quadratureWeightsRef;
-    Gedim::Quadrature_Gauss3D_Tetrahedron::FillPointsAndWeights(quadratureOrder,
-                                                                quadraturePointsRef,
-                                                                quadratureWeightsRef);
-
-    {
-        Gedim::VTKUtilities vtkUtilities;
-        vtkUtilities.AddPoints(quadraturePointsRef);
-        vtkUtilities.Export(exportFolder +
-                            "/POINT_REF_" +
-                            ".vtu");
-    }
-
-    Gedim::MapTetrahedron mapping(geometryUtilities);
-    const Gedim::MapTetrahedron::MapTetrahedronData mapData = mapping.Compute(vertices);
-
-    Eigen::MatrixXd mappedPoints = mapping.F(mapData,
-                                             quadraturePointsRef);
-
-
-    Eigen::VectorXd mappedWeights = quadratureWeightsRef.array() * mapping.DetJ(mapData,
-                                                                                quadraturePointsRef).array().abs();
-
-    {
-        Gedim::VTKUtilities vtkUtilities;
-        vtkUtilities.AddPoints(mappedPoints);
-        vtkUtilities.Export(exportFolder +
-                            "/POINT_" +
-                            ".vtu");
-    }
-
-    const double volume = mappedWeights.sum();
-    double int_x_sqrd = 0.0;
-    for (unsigned int q = 0; q < quadraturePointsRef.cols(); q++)
-      int_x_sqrd += mappedPoints.col(q).x() * mappedPoints.col(q).y() * mappedWeights[q];
-
-}
 // ***************************************************************************
 EllipticProblem::EllipticProblem(const EllipticProblem_ProgramConfiguration& config) :
     config(config)
@@ -147,7 +65,6 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
     Gedim::GeometryUtilities geometryUtilities(geometryUtilitiesConfig);
     Gedim::MeshUtilities meshUtilities;
 
-    //TestQuadrature(geometryUtilities);
 
     /// Create folders
     const string exportFolder = config.ExportFolder();
@@ -428,26 +345,39 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
     Gedim::Output::CreateFolder(exportMatrFolder);
 
     const string matrixFile = exportMatrFolder + "/AhD.txt";
-    ofstream fw(matrixFile, std::ofstream::out);
+    ofstream fw1(matrixFile, std::ofstream::out);
 
-    if (fw.is_open())
+    if (fw1.is_open())
     {
-        fw << "\n\n";
+        fw1 << "\n\n";
 
         Eigen::MatrixXd AhD_dense = AhD.toDense();
         for(unsigned int i = 0; i < AhD_dense.rows(); i++)
         {
             for(unsigned int j = 0; j < AhD_dense.cols(); j++)
             {
-                fw << AhD_dense(i,j) << " ";
+                fw1 << AhD_dense(i,j) << " ";
             }
 
-            fw << "\n";
+            fw1 << "\n";
         }
 
-        fw.close();
+        fw1.close();
     }
-    else std::cout << "Problem with opening file";
+    else std::cout << "Problem with opening matrix file";
+
+    const string infoFilePath = exportMatrFolder + "/info.txt";
+    ofstream fw2(infoFilePath, std::ofstream::out);
+
+    if (fw2.is_open())
+    {
+        fw2 << numDofs3D << "\n";
+        fw2 << numEnrichements << "\n";
+        fw2 << num_Dirichlet_3D << "\n";
+
+        fw2.close();
+    }
+    else std::cout << "Problem with opening info file";
 
     // ***************************************************************************************
 

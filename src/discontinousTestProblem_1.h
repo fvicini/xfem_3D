@@ -8,8 +8,24 @@
 
 namespace XFEM_3D
 {
+
+typedef struct
+{
+
+
+} constructBlockDomainAndMeshResultType;
+
+typedef struct
+{
+
+} setBoundaryConditionsResultType;
+
 namespace DiscontinousTestProblem_1
 {
+
+    void constructBlockDomainAndMesh();
+
+    void setBoundaryConditions();
 
     Eigen::VectorXd exactSolution(Eigen::MatrixXd meshPointsCoordinates,
                                                     unsigned int numDofs3D_std,

@@ -1,9 +1,9 @@
 #include "P1MatrixAssembler.hpp"
 #include "Quadrature_Gauss3D_Tetrahedron.hpp"
-#include "Quadrature_Gauss2D_Triangle.hpp"
 #include "MapTetrahedron.hpp"
-#include "MapTriangle.hpp"
 #include "Utilities.hpp"
+
+#define DEBUG_CONSTANT 12
 
 namespace XFEM_3D
 {
@@ -36,109 +36,8 @@ void P1MatrixAssembler::initialize(unsigned int numDOF_3D_std, unsigned int numD
     // Initializing the enrichment information
     this->initializeEnrichmentInformation(numDOF_3D_std, numDirich_3D);
 
-    // Initializing the coupling for hD, PsiP variables
-    //this->initialize_2D_3DCoupling(fractureBorder::positive);
-
-    // Initializing the coupling for hD, PsiM variables
-    //this->initialize_2D_3DCoupling(fractureBorder::negative);
-
-    // Initializing the coupling for hD, PsiF variables
-    //this->initialize_2D_3DCoupling(fractureBorder::fracture);
-
 }
 
-void P1MatrixAssembler::initialize_2D_3DCoupling(fractureBorder type)
-{
-//    Gedim::MeshMatricesDAO* mesh3D;
-//    Gedim::MeshMatricesDAO* mesh2D;
-//    Eigen::SparseMatrix<unsigned int>* intersectionMatrix;
-
-//    switch (type) {
-//    case fractureBorder::positive:
-//    {
-//        mesh3D = this->hD_Mesh;
-//        mesh2D = this->psiP_Mesh;
-//        intersectionMatrix = this->hD_PsiP_MeshIntersections;
-
-//        break;
-//    }
-//    case fractureBorder::negative:
-//    {
-//        mesh3D = this->hD_Mesh;
-//        mesh2D = this->psiM_Mesh;
-//        intersectionMatrix = this->hD_PsiM_MeshIntersections;
-
-//        break;
-//    }
-
-//    case fractureBorder::fracture:
-//    {
-//        mesh3D = this->hD_Mesh;
-//        mesh2D = this->psiF_Mesh;
-//        intersectionMatrix = this->hD_PsiM_MeshIntersections;
-
-//        break;
-//    }
-//    }
-
-
-//    for (unsigned int e = 0; e < mesh3D->Cell3DTotalNumber(); e++)
-//    {
-//        if (!this->toEnrich_elements->coeff(e, 0))
-//            continue;
-
-//        // First column is global index in the mesh3D of the current element.
-//        intersectionMatrix->coeffRef(e, 0) = e;
-
-//        // Auxiliary geometric variables
-//        Gedim::GeometryUtilities::Polyhedron elementAsPolyhedron = meshUtilities->MeshCell3DToPolyhedron(*mesh3D, e);
-//        std::vector<Eigen::MatrixXd>  polyhedronFaceVertices = geometryUtilities->PolyhedronFaceVertices(elementAsPolyhedron.Vertices,
-//                                                                                                         elementAsPolyhedron.Faces);
-//        std::vector<Eigen::Vector3d> polyhedronFaceTranslations = geometryUtilities->PolyhedronFaceTranslations(polyhedronFaceVertices);
-//        std::vector<Eigen::Vector3d> polyhedronFaceNormals = geometryUtilities->PolyhedronFaceNormals(polyhedronFaceVertices);
-//        std::vector<Eigen::Matrix3d> polyhedronFaceRotationMatrices = geometryUtilities->PolyhedronFaceRotationMatrices(polyhedronFaceVertices,
-//                                                                                                                        polyhedronFaceNormals,
-//                                                                                                                        polyhedronFaceTranslations);
-//        std::vector<Eigen::MatrixXd> polyhedronFaceRotatedVertices = geometryUtilities->PolyhedronFaceRotatedVertices(polyhedronFaceVertices,
-//                                                                                                                      polyhedronFaceTranslations,
-//                                                                                                                      polyhedronFaceRotationMatrices);
-//        Eigen::Vector3d pointInsidePolyhedron = geometryUtilities->PolyhedronBarycenter(elementAsPolyhedron.Vertices);
-//        std::vector<bool> polyhedronFaceNormalDirections = geometryUtilities->PolyhedronFaceNormalDirections(polyhedronFaceVertices,
-//                                                                                                             pointInsidePolyhedron,
-//                                                                                                             polyhedronFaceNormals);
-
-
-//        // Cycle on 2D mesh and find which elements are intersected
-//        // It is enough to find a node of the 2D element lying inside of the current 3D element
-//        for (unsigned int t = 0; t < mesh2D->Cell2DTotalNumber(); t++)
-//        {
-//            // Identification of the current triangle as a vector of point global Ids.
-//            vector<unsigned int> elementPointsIds = mesh2D->Cell2DVertices(t);
-
-//            // Checking whether the triangle is intersected by the current 3D element.
-//            for (unsigned int k = 0; k < elementPointsIds.size(); k++)
-//            {
-
-//                Gedim::GeometryUtilities::PointPolyhedronPositionResult result = geometryUtilities->PointPolyhedronPosition(mesh2D->Cell0DCoordinates(elementPointsIds.at(k)),
-//                                                                                                                            elementAsPolyhedron.Faces,
-//                                                                                                                            polyhedronFaceVertices,
-//                                                                                                                            polyhedronFaceRotatedVertices,
-//                                                                                                                            polyhedronFaceNormals,
-//                                                                                                                            polyhedronFaceNormalDirections,
-//                                                                                                                            polyhedronFaceTranslations,
-//                                                                                                                            polyhedronFaceRotationMatrices);
-
-//                if (result.Type == Gedim::GeometryUtilities::PointPolyhedronPositionResult::Types::Inside)
-//                {
-//                    // The triangle is chosen
-//                    intersectionMatrix->coeffRef(e, t+1) = 1;
-//                }
-//            }
-
-//        }
-//    }
-
-}
 
 void P1MatrixAssembler::initializeEnrichmentInformation(unsigned int numDOF_3D_std, unsigned int numDirich_3D)
 {
@@ -263,14 +162,34 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                                        Eigen::SparseMatrix<double>& GhD_dirich,
                                        Eigen::VectorXd&             rightHandSide)
 {
+
     Gedim::MeshMatricesDAO blockMesh = *this->hD_Mesh;
     Eigen::MatrixXi pivot = *this->hD_Pivot;
 
     for (unsigned int e = 0; e < blockMesh.Cell3DTotalNumber(); e++)
     {
+
+        bool elementCutByFracture = this->toEnrich_elements->coeff(e, 0);
+
+        const Gedim::GeometryUtilities::Polyhedron element = meshUtilities->MeshCell3DToPolyhedron(blockMesh, e);
+        Eigen::Vector3d tetrahedronBarycenter = geometryUtilities->PolyhedronBarycenter(element.Vertices);
+
+        Eigen::Matrix3d nu = this->physicalParameters->getPermeabilityTensorVolume();
+
+        MappingFromReferenceTetrahedronInfo mapping = this->MapFromReferenceTetrahedron(element);
+        double abs_detJ         = mapping.abs_detJ;
+        Eigen::Matrix3d JJ      = mapping.JJ;
+
+        Eigen::Matrix<double, 3, 4> GradPhi;
+
+        GradPhi << -1, 1, 0, 0,
+                   -1, 0, 1, 0,
+                   -1, 0, 0, 1;
+
         // Cycle on the test function index
         for (unsigned short int i = 0; i < 4; i++)
         {
+            Eigen::Vector3d gradPhi_i = GradPhi.col(i);
 
             int globIdNode_i = blockMesh.Cell3DVertex(e, i);
             int ii_std = pivot(globIdNode_i, 0);
@@ -278,7 +197,7 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
             bool i_node_is_DOF = ii_std > 0;
             bool i_node_is_to_enrich =  pivot(globIdNode_i, 1) > 0;
 
-            if (i_node_is_DOF)
+            if (i_node_is_DOF) // Comprende: 1A, 1B, 3A, 3B, 2, 4, 5, 6
             {
 
                 if (i_node_is_to_enrich)
@@ -286,59 +205,235 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                     unsigned int ii_enr = pivot(globIdNode_i, 1);
 
                     // Cycling on the trial function index
-                    for (unsigned short int j = 0; j < 4; j++)
+                    for (unsigned short int j = 0; j < 4; j++)                        
                     {
+                        Eigen::Vector3d gradPhi_j = GradPhi.col(j);
+
                         int globIdNode_j = blockMesh.Cell3DVertex(e, j);
                         int jj_std = pivot(globIdNode_j, 0);
 
                         bool j_node_is_DOF = jj_std > 0;
                         bool j_node_is_to_enrich =  pivot(globIdNode_j, 1) > 0;
 
+
                         if (j_node_is_DOF)
                         {
-
                             if (j_node_is_to_enrich)
                             {
-                                unsigned int jj_enr = pivot(globIdNode_j, 1);
+                                if (elementCutByFracture)
+                                {
+                                    // CASISTICA 1A DELLA DOCUMENTAZIONE ============================================================================================
 
-                                this->constructElement_AhD(AhD, ii_std, jj_std, globIdNode_i, globIdNode_j, e, integrationType::std_std);
+                                    double integralValue_ss_Ahd = 0.0,
+                                           integralValue_se_Ahd = 0.0,
+                                           integralValue_es_Ahd = 0.0,
+                                           integralValue_ee_Ahd = 0.0;
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_std, globIdNode_i, globIdNode_j, e, integrationType::enr_std);
+                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
 
-                                this->constructElement_AhD(AhD, ii_std, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::std_enr);
+                                    integralValue_ss_Ahd = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::enr_enr);
+                                    {
+                                        double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
+                                                                                                              *fracture)),
+                                               Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
+                                                                                                               *fracture));
 
+                                        std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
+                                                                                                                                                     fracture,
+                                                                                                                                                     this->geometryUtilities,
+                                                                                                                                                     this->meshUtilities);
+                                        for(auto& subTetrahedron : subTetrahedra)
+                                        {
+                                            Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
+                                            double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
+
+                                            MappingFromReferenceTetrahedronInfo mapping = this->MapFromReferenceTetrahedron(subTetrahedron);
+                                            double abs_detJ    = mapping.abs_detJ;
+                                            Eigen::Matrix3d JJ = mapping.JJ;
+
+                                            integralValue_es_Ahd += (Psi - Psi_i) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                            integralValue_se_Ahd += (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                            integralValue_ee_Ahd += (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                        }
+
+                                        AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
+                                        AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
+                                        AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
+                                        AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
+                                    }
+                                    // (FINE CASISTICA 1A) ===================================================================================================
+                                }
+
+                                else
+                                {
+                                    // CASISTICA 1B DELLA DOCUMENTAZIONE =====================================================================================
+
+                                    double integralValue_ss_Ahd = 0.0,
+                                           integralValue_se_Ahd = 0.0,
+                                           integralValue_es_Ahd = 0.0,
+                                           integralValue_ee_Ahd = 0.0;
+
+
+                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
+
+                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
+                                                                                                          *fracture)),
+                                           Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
+                                                                                                           *fracture)),
+                                           Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
+
+
+                                    integralValue_ss_Ahd = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                    integralValue_es_Ahd = (Psi - Psi_i) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                    integralValue_se_Ahd = (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                    integralValue_ee_Ahd = (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                    AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
+                                    AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
+                                    AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
+                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
+
+                                    // (FINE CASISTICA 1B) ===================================================================================================
+                                }
                             }
-                            else
+                            else // Il nodo j non è da arricchire
                             {
-                                this->constructElement_AhD(AhD, ii_std, jj_std, globIdNode_i, globIdNode_j, e, integrationType::std_std);
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_std, globIdNode_i, globIdNode_j, e, integrationType::enr_std);
+                                // CASISTICA 2 DELLA DOCUMENTAZIONE ==========================================================================================
+
+                                double integralValue_ss_Ahd = 0.0,
+                                       integralValue_es_Ahd = 0.0;
+
+                                double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
+                                                                                                       *fracture)),
+                                       Psi   = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter,
+                                                                                                       *fracture));
+
+                                integralValue_ss_Ahd = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                integralValue_es_Ahd = (Psi - Psi_i) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
+                                AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
+
+                                // (FINE CASISTICA 2) =======================================================================================================
                             }
 
                         }
-                        else  // Il nodo (e,j) è di Dirichlet. Può ancora essere da arricchire e portare contributo coi suoi DOF enr.
+                        else  // Il nodo j è di Dirichlet. Può ancora essere da arricchire e portare contributo coi suoi DOF enr.
                         {
-                            // this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
-
-                            // this->constructElement_AhD(AhD_dirich, ii_enr, -jj_std, ii_std, -jj_std, e, integrationType::enr_std);
+                            /*
+                             *   this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
+                             *
+                             *   this->constructElement_AhD(AhD_dirich, ii_enr, -jj_std, ii_std, -jj_std, e, integrationType::enr_std);
+                            */
 
                             if (j_node_is_to_enrich)
                             {
-                                unsigned int jj_enr = pivot(globIdNode_j, 1);
+                                if (elementCutByFracture)
+                                {
+                                    // CASISTICA 3A DELLA DOCUMENTAZIONE =====================================================================================
 
-                                this->constructElement_AhD(AhD, ii_std, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::std_enr);
+                                    double integralValue_se_Ahd = 0.0,
+                                           integralValue_ee_Ahd = 0.0;
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::enr_enr);
+                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
+                                                                                                          *fracture)),
+                                           Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
+                                                                                                           *fracture));
+
+                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
+
+                                    std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
+                                                                                                                                                 fracture,
+                                                                                                                                                 this->geometryUtilities,
+                                                                                                                                                 this->meshUtilities);
+                                    for(auto& subTetrahedron : subTetrahedra)
+                                    {
+                                        Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
+                                        double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
+
+                                        MappingFromReferenceTetrahedronInfo mapping = this->MapFromReferenceTetrahedron(subTetrahedron);
+                                        double abs_detJ         = mapping.abs_detJ;
+                                        Eigen::Matrix3d JJ      = mapping.JJ;
+
+                                        integralValue_se_Ahd += (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                        integralValue_ee_Ahd += (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                    }
+                                    AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
+                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
+
+                                    // (FINE CASISTICA 3A) ===================================================================================================
+                                }
+                                else
+                                {
+                                    // CASISTICA 3B DELLA DOCUMENTAZIONE =====================================================================================
+
+                                    double integralValue_se_Ahd = 0.0,
+                                           integralValue_ee_Ahd = 0.0;
+
+                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
+                                                                                                          *fracture)),
+                                           Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
+                                                                                                           *fracture));
+
+                                    double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
+
+                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
+
+                                    integralValue_se_Ahd = (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                    integralValue_ee_Ahd = (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                    AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
+                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
+
+                                    // (FINE CASISTICA 3B) ===================================================================================================
+
+                                }
                             }
                         }
                     }
 
-                    // Il nodo i è da arricchire. Quindi, costruiamo il RHS sia per il DOF std che per il DOF enr.
+                    // COSTRUZIONE RHS =======================================================================================================================
+                    // ii_std
+                    double averaged_f = this->physicalParameters->forcingTermAveragedOnTetrahedron(element.Vertices, *fracture);
+                    rightHandSide(ii_std - 1) += averaged_f * abs_detJ * (1.0 / 24.0);
 
-                    this->constructElement_Rhs(rightHandSide, ii_std, globIdNode_i, e, integrationType::std);
-                    this->constructElement_Rhs(rightHandSide, ii_enr, globIdNode_i, e, integrationType::enr);
+                    // ii_enr
+                    double integralValue_rhs_enr = 0.0;
+                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
+                                                                                          *fracture));
+                    if (elementCutByFracture)
+                    {
+                        std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
+                                                                                                                                     fracture,
+                                                                                                                                     this->geometryUtilities,
+                                                                                                                                     this->meshUtilities);
+                        for(auto& subTetrahedron : subTetrahedra)
+                        {
+                            Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
+                            double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
+
+                            MappingFromReferenceTetrahedronInfo mapping = this->MapFromReferenceTetrahedron(subTetrahedron);
+                            double abs_detJ = mapping.abs_detJ;
+
+                            integralValue_rhs_enr += (Psi - Psi_i) * averaged_f * abs_detJ * (1.0 / 24.0);
+
+                        }
+
+                        rightHandSide(ii_enr - 1) = integralValue_rhs_enr;
+
+                    }
+                    else
+                    {
+                        double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i), *fracture));
+                        double Psi   = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
+
+                        rightHandSide(ii_enr - 1) = (Psi - Psi_i) * averaged_f * abs_detJ * (1.0 / 24.0);
+                    }
+                    // (FINE COSTRUZIONE RHS) =================================================================================================================
 
                 }
 
@@ -346,6 +441,8 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                 {
                     for (unsigned short int j = 0; j < 4; j++)
                     {
+                        Eigen::Vector3d gradPhi_j = GradPhi.col(j);
+
                         int globIdNode_j = blockMesh.Cell3DVertex(e, j);
                         int jj_std = pivot(globIdNode_j, 0);
 
@@ -356,41 +453,79 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                         {
                             if (j_node_is_to_enrich)
                             {
+                                // CASISTICA 4 DELLA DOCUMENTAZIONE ======================================================================================
+
                                 unsigned int jj_enr = pivot(globIdNode_j, 1);
 
-                                this->constructElement_AhD(AhD, ii_std, jj_std, globIdNode_i, globIdNode_j, e, integrationType::std_std);
+                                double integralValue_ss_Ahd = 0.0,
+                                       integralValue_se_Ahd = 0.0;
 
-                                this->constructElement_AhD(AhD, ii_std, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::std_enr);
+                                double Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
+                                                                                                       *fracture)),
+                                       Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
+
+                                integralValue_ss_Ahd = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                integralValue_se_Ahd = (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
+                                AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
+
+                                // (FINE CASISTICA 4) ===================================================================================================
+
                             }
-                            else
+
+
+                            else // Il nodo j non è da arricchire
                             {
-                                this->constructElement_AhD(AhD, ii_std, jj_std, globIdNode_i, globIdNode_j, e, integrationType::std_std);
+                                // CASISTICA 5 DELLA DOCUMENTAZIONE =====================================================================================
+
+                                double integralValue_ss_Ahd = 0.0;
+
+                                integralValue_ss_Ahd = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
+
+                                // (FINE CASISTICA 5) ===================================================================================================
+
                             }
+
                         }
 
-                        else // Il nodo (e,j) è di Dirichlet
+                        else // Il nodo j è di Dirichlet
                         {
                             // this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
 
                             if (j_node_is_to_enrich)
                             {
+                                // CASISTICA 6 DELLA DOCUMENTAZIONE =======================================================================================
+
                                 unsigned int jj_enr = pivot(globIdNode_j, 1);
 
-                                this->constructElement_AhD(AhD, ii_std, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::std_enr);
+                                double integralValue_se_Ahd = 0.0;
+
+                                double Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
+                                                                                                       *fracture)),
+                                       Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
+
+                                integralValue_se_Ahd = (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
+
+                                // (FINE CASISTICA 6) ===================================================================================================
                             }
-
                         }
-
                     }
 
-                    // Il nodo i non è da arricchire. Costruiamo il RHS solo sul DOF std.
-                    this->constructElement_Rhs(rightHandSide, ii_std, globIdNode_i, e, integrationType::std);
+                    // Costruzione RHS per il DOF ii_std
+                    double averaged_f = this->physicalParameters->forcingTermAveragedOnTetrahedron(element.Vertices, *fracture);
+
+                    rightHandSide(ii_std - 1) += averaged_f * abs_detJ * (1.0 / 24.0);
 
                 }
 
             }
 
-            else // Il nodo (e,i) non è un DOF (è una condizione di Dirichlet). Può essere da arricchire o no.
+            else // Il nodo i non è un DOF. Comprende: 7A, 7B, 8, 9
             {
                 if (i_node_is_to_enrich)
                 {
@@ -399,6 +534,8 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                     // Cycling on the trial function index
                     for (unsigned short int j = 0; j < 4; j++)
                     {
+                        Eigen::Vector3d gradPhi_j = GradPhi.col(j);
+
                         int globIdNode_j = blockMesh.Cell3DVertex(e, j);
                         int jj_std = pivot(globIdNode_j, 0);
 
@@ -407,34 +544,168 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
 
                         if (j_node_is_DOF)
                         {
-
                             if (j_node_is_to_enrich)
                             {
+                                if (elementCutByFracture)
+                                {
 
-                                unsigned int jj_enr = pivot(globIdNode_j, 1);
+                                    // CASISTICA 7A DELLA DOCUMENTAZIONE ============================================================================================
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_std, globIdNode_i, globIdNode_j, e, integrationType::enr_std);
+                                    double integralValue_es_Ahd = 0.0,
+                                           integralValue_ee_Ahd = 0.0;
 
-                                this->constructElement_AhD(AhD, ii_enr, jj_enr, globIdNode_i, globIdNode_j, e, integrationType::enr_enr);
+                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
+                                                                                                          *fracture)),
+                                           Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
+                                                                                                           *fracture));
+
+                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
+
+                                    std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
+                                                                                                                                                 fracture,
+                                                                                                                                                 this->geometryUtilities,
+                                                                                                                                                 this->meshUtilities);
+                                    for(auto& subTetrahedron : subTetrahedra)
+                                    {
+                                        Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
+                                        double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
+
+                                        MappingFromReferenceTetrahedronInfo mapping = this->MapFromReferenceTetrahedron(subTetrahedron);
+                                        double abs_detJ         = mapping.abs_detJ;
+                                        Eigen::Matrix3d JJ      = mapping.JJ;
+
+                                        integralValue_es_Ahd += (Psi - Psi_i) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                        integralValue_ee_Ahd += (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                    }
+                                    AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
+                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
+
+                                    // (FINE CASISTICA 7A) ===================================================================================================
+                                }
+
+                                else
+                                {
+                                    // CASISTICA 7B DELLA DOCUMENTAZIONE ============================================================================================
+
+                                    double integralValue_es_Ahd = 0.0,
+                                           integralValue_ee_Ahd = 0.0;
+
+                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
+
+                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
+                                                                                                          *fracture)),
+                                           Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
+                                                                                                           *fracture));
+                                    double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
+
+                                    integralValue_es_Ahd = (Psi - Psi_i) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                    integralValue_ee_Ahd = (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                    AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
+                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
+
+                                    // (FINE CASISTICA 7B) ===================================================================================================
+
+                                }
 
                             }
-                            else
+
+                            else // Il nodo j non è da arricchire
                             {
-                                this->constructElement_AhD(AhD, ii_enr, jj_std, globIdNode_i, globIdNode_j, e, integrationType::enr_std);
-                            }
+                                // CASISTICA 8 DELLA DOCUMENTAZIONE ============================================================================================
 
+                                double integralValue_es_Ahd = 0.0;
+
+                                double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
+                                                                                                *fracture)),
+                                       Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
+
+                                integralValue_es_Ahd = (Psi - Psi_i) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
+
+                                // (FINE CASISTICA 8) ===================================================================================================
+
+                            }
                         }
-                        else  // jj_std è nodo di Dirichlet
+
+                        else  // Anche j è nodo di Dirichlet.
                         {
                             //  this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, -ii_std, -jj_std, e, integrationType::std_std);
 
                             //  this->constructElement_AhD(AhD_dirich, ii_enr, -jj_std, -ii_std, -jj_std, e, integrationType::enr_std);
 
+                            if (j_node_is_to_enrich)
+                            {
+                                if (elementCutByFracture)
+                                {
+                                    // CASISTICA 9A DELLA DOCUMENTAZIONE =====================================================================================
+
+                                    double integralValue_ee_Ahd = 0.0;
+
+                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
+
+                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
+                                                                                                          *fracture)),
+                                            Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
+                                                                                                           *fracture));
+
+                                    std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
+                                                                                                                                                 fracture,
+                                                                                                                                                 this->geometryUtilities,
+                                                                                                                                                 this->meshUtilities);
+                                    for(auto& subTetrahedron : subTetrahedra)
+                                    {
+                                        Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
+                                        double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
+
+                                        MappingFromReferenceTetrahedronInfo mapping = this->MapFromReferenceTetrahedron(subTetrahedron);
+                                        double abs_detJ         = mapping.abs_detJ;
+                                        Eigen::Matrix3d JJ      = mapping.JJ;
+
+                                        integralValue_ee_Ahd += (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+                                    }
+
+                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
+
+                                    // (FINE CASISTICA 9A) ===================================================================================================
+                                }
+                                else
+                                {
+                                    // CASISTICA 9B DELLA DOCUMENTAZIONE =====================================================================================
+
+                                    double integralValue_ee_Ahd = 0.0;
+
+                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
+
+                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
+                                                                                                          *fracture)),
+                                            Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
+                                                                                                           *fracture));
+
+                                    double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
+
+                                    integralValue_ee_Ahd = (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
+
+                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
+
+                                    // (FINE CASISTICA 9B) ===================================================================================================
+                                }
+                            }
                         }
                     }
 
-                    // Il nodo i ha una condizione di Dirichlet ma è da arricchire. Costruiamo il RHS solo sul DOF enr.
-                    this->constructElement_Rhs(rightHandSide, ii_enr, globIdNode_i, e, integrationType::enr);
+                    // COSTRUZIONE RHS =======================================================================================================================
+
+                    double averaged_f = this->physicalParameters->forcingTermAveragedOnTetrahedron(element.Vertices, *fracture);
+                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i), *fracture));
+                    double Psi   = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
+
+                    rightHandSide(ii_enr - 1) += (Psi - Psi_i) * averaged_f * abs_detJ * (1.0 / 24.0);
+
+                    // (FINE COSTRUZIONE RHS) =================================================================================================================
+
 
                 }
             }
@@ -444,445 +715,37 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
 }
 
 
-void P1MatrixAssembler::constructElement_AhD(Eigen::SparseMatrix<double>& M,
-                                              unsigned int row,
-                                              unsigned int col,
-                                              unsigned int globIdNode_i,
-                                              unsigned int globIdNode_j,
-                                             const unsigned int elementIndex,
-                                             const integrationType type)
-{    
-
-    /*
-     * Gli indici dei DOF/nodi Dirich. sono numerati in pivot seguendo la seguente convenzione:
-     *      1,2,3,4,5...      per i DOF
-     *      -1,-2,-3,-4,-5... per le condizioni di Dirichlet
-     * Ora, voglio mettere il contributo del primo DOF nella prima riga della matrice di rigidezza, ovvero la riga 0.
-     * Di conseguenza, decremento gli indici per avere la loro posizione nella matrice.
-     * */
-    row--;
-    col--;
-
-    #ifdef __DEBUG__
-    std::cout << "Entered constructElement function." << std::endl;
-    #endif
-    // We are assembling the A^hD matrix, therefore we use the mesh for the hD variable.
-    Gedim::MeshMatricesDAO mesh = *this->hD_Mesh;
-
-    // Identification of the current tetrahedron
-    const Gedim::GeometryUtilities::Polyhedron element = meshUtilities->MeshCell3DToPolyhedron(mesh, elementIndex);
-
-    // Identification of "test node"'s coordinates
-    Eigen::Vector3d x_iCoord = mesh.Cell0DCoordinates(globIdNode_i);
-
-    // Identification of "trial node"'s coordinates
-    Eigen::Vector3d x_jCoord = mesh.Cell0DCoordinates(globIdNode_j);
-
-    // Identification of the current test (i-th) basis function
-    #ifdef __DEBUG__
-    std::cout << "Starting determination of lagrange test basis coeffs..." << std::endl;
-    #endif
-    Eigen::Vector4d testLagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(globIdNode_i), element);
-
-    // Identification of the current trial (j-th) basis function
-    #ifdef __DEBUG__
-    std::cout << "Starting determination of lagrange trial basis coeffs..." << std::endl;
-    #endif
-    Eigen::Vector4d trialLagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(globIdNode_j), element);
-
-
-    // ******************************************************************************************************************************
-    // Integration: different integration routines for the different combinations of DOF types that may arise.
-    double integralValue = 0.0;
-    switch (type)
-    {
-
-    case integrationType::std_std:
-    {
-        #ifdef __DEBUG__
-        std::cout << "Starting a std_std integration... position in matrix: " << row << ", " << col << "\n" << std::endl;
-        #endif
-
-        // Preparation of the quadrature formula
-        const unsigned int quadratureOrder = 2;
-        Eigen::MatrixXd quadraturePointsRef;
-        Eigen::VectorXd quadratureWeightsRef;
-        Gedim::Quadrature_Gauss3D_Tetrahedron::FillPointsAndWeights(quadratureOrder,
-                                                                    quadraturePointsRef,
-                                                                    quadratureWeightsRef);
-
-        Gedim::MapTetrahedron mapping(*geometryUtilities);
-
-        // Mapping the reference quadrature nodes and weights on the tetrahedron
-
-        const Gedim::MapTetrahedron::MapTetrahedronData mapData = mapping.Compute(element.Vertices);
-
-        Eigen::MatrixXd mappedPoints = mapping.F(mapData,
-                                                 quadraturePointsRef);
-
-        Eigen::VectorXd mappedWeights = quadratureWeightsRef.array() * mapping.DetJ(mapData,
-                                                                                    quadraturePointsRef).array().abs();
-
-
-        // Computing the integral
-
-        Eigen::Vector3d GradPhi_i = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
-        Eigen::Vector3d GradPhi_j = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
-
-        double scalarProduct = (this->physicalParameters->getPermeabilityTensorVolume() * GradPhi_j).transpose() * GradPhi_i;
-
-        for (unsigned int q = 0; q < mappedPoints.cols(); q++)
-        {
-            integralValue += mappedWeights(q) * scalarProduct;
-        }
-
-        break;
-    }
-
-    case integrationType::enr_std:
-    {
-        #ifdef __DEBUG__
-        std::cout << "Starting a enr_std integration... position in matrix: " << row << ", " << col << "\n" << std::endl;
-        #endif
-
-        // Preparation of the quadrature formula
-
-        const unsigned int quadratureOrder = 2;
-        Eigen::MatrixXd quadraturePointsRef;
-        Eigen::VectorXd quadratureWeightsRef;
-        Gedim::Quadrature_Gauss3D_Tetrahedron::FillPointsAndWeights(quadratureOrder,
-                                                                    quadraturePointsRef,
-                                                                    quadratureWeightsRef);
-
-        Gedim::MapTetrahedron mapping(*geometryUtilities);
-
-        // Mapping the reference quadrature nodes and weights on the tetrahedron
-
-        const Gedim::MapTetrahedron::MapTetrahedronData mapData = mapping.Compute(element.Vertices);
-
-        Eigen::MatrixXd mappedPoints = mapping.F(mapData,
-                                                 quadraturePointsRef);
-
-        Eigen::VectorXd mappedWeights = quadratureWeightsRef.array() * mapping.DetJ(mapData,
-                                                                                    quadraturePointsRef).array().abs();
-
-        // Computing the integral
-
-        Eigen::Vector3d GradPhi_i = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
-        Eigen::Vector3d GradPhi_j = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
-        double scalarProduct = (this->physicalParameters->getPermeabilityTensorVolume() * GradPhi_j).transpose() * GradPhi_i;
-
-        double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(x_iCoord, *fracture));
-
-        for (unsigned int q = 0; q < mappedPoints.cols(); q++)
-        {
-            double Psi_q = Utilities::heaviside(Utilities::signedDistanceFunction(mappedPoints.col(q), *fracture));
-            integralValue += mappedWeights(q) * ((Psi_q - Psi_i) * scalarProduct);
-        }
-
-        break;
-    }
-
-    case integrationType::std_enr:
-    {
-        #ifdef __DEBUG__
-        std::cout << "Starting a std_enr integration... position in matrix: " << row << ", " << col << "\n" << std::endl;
-        #endif
-
-        // Preparation of the quadrature formula
-
-        const unsigned int quadratureOrder = 2;
-        Eigen::MatrixXd quadraturePointsRef;
-        Eigen::VectorXd quadratureWeightsRef;
-        Gedim::Quadrature_Gauss3D_Tetrahedron::FillPointsAndWeights(quadratureOrder,
-                                                                    quadraturePointsRef,
-                                                                    quadratureWeightsRef);
-
-        Gedim::MapTetrahedron mapping(*geometryUtilities);
-
-        // Mapping the reference quadrature nodes and weights on the tetrahedron
-
-        const Gedim::MapTetrahedron::MapTetrahedronData mapData = mapping.Compute(element.Vertices);
-
-        Eigen::MatrixXd mappedPoints = mapping.F(mapData,
-                                                 quadraturePointsRef);
-
-        Eigen::VectorXd mappedWeights = quadratureWeightsRef.array() * mapping.DetJ(mapData,
-                                                                                    quadraturePointsRef).array().abs();
-
-        // Computing the integral
-
-        Eigen::Vector3d GradPhi_i = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
-        Eigen::Vector3d GradPhi_j = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
-        double scalarProduct = (this->physicalParameters->getPermeabilityTensorVolume() * GradPhi_j).transpose() * GradPhi_i;
-
-        double Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(x_jCoord, *fracture));
-
-        for (unsigned int q = 0; q < mappedPoints.cols(); q++)
-        {
-            double Psi_q = Utilities::heaviside(Utilities::signedDistanceFunction(mappedPoints.col(q), *fracture));
-            integralValue += mappedWeights(q) * ((Psi_q - Psi_j) * scalarProduct);
-        }
-
-        break;
-    }
-
-    case integrationType::enr_enr:
-    {
-        #ifdef __DEBUG__
-        std::cout << "Starting a enr_enr integration...position in matrix: " << row << ", " << col << "\n" << std::endl;
-        #endif
-
-        // Auxiliary geometric variables
-        const std::vector<std::vector<bool>> polyhedronFaceEdgeDirections = geometryUtilities->PolyhedronFaceEdgeDirections(element.Vertices,
-                                                                                                                           element.Edges,
-                                                                                                                           element.Faces);
-        const std::vector<Eigen::MatrixXd> polyhedronFaceVertices = geometryUtilities->PolyhedronFaceVertices(element.Vertices,
-                                                                                                             element.Faces);
-        const Eigen::MatrixXd polyhedronEdgeTangents = geometryUtilities->PolyhedronEdgeTangents(element.Vertices, element.Edges);
-        const std::vector<Eigen::MatrixXd> polyhedronFaceTangents = geometryUtilities->PolyhedronFaceEdgeTangents(element.Vertices,
-                                                                                                                 element.Edges,
-                                                                                                                 element.Faces,
-                                                                                                                 polyhedronFaceEdgeDirections,
-                                                                                                                 polyhedronEdgeTangents);
-        const std::vector<Eigen::Vector3d> polyhedronFaceTranslations = geometryUtilities->PolyhedronFaceTranslations(polyhedronFaceVertices);
-        const std::vector<Eigen::Vector3d> polyhedronFaceNormals = geometryUtilities->PolyhedronFaceNormals(polyhedronFaceVertices);
-        const std::vector<Eigen::Matrix3d> polyhedronFaceRotationMatrices = geometryUtilities->PolyhedronFaceRotationMatrices(polyhedronFaceVertices,
-                                                                                                                             polyhedronFaceNormals,
-                                                                                                                             polyhedronFaceTranslations);
-
-        // Splitting the mesh tetrahedron into sub-polyhedra
-        Gedim::GeometryUtilities::SplitPolyhedronWithPlaneResult result = geometryUtilities->SplitPolyhedronWithPlane(element.Vertices,
-                                                                                                                     element.Edges,
-                                                                                                                     element.Faces,
-                                                                                                                     polyhedronFaceVertices,
-                                                                                                                     polyhedronFaceTangents,
-                                                                                                                     polyhedronFaceTranslations,
-                                                                                                                     polyhedronFaceRotationMatrices,
-                                                                                                                     fracture->getNormal(),
-                                                                                                                     fracture->getOrigin(),
-                                                                                                                     fracture->getRotation(),
-                                                                                                                     fracture->getTranslation());
-        // By now, we only know that the two nodes are enriched, but the element may be just blending and
-        // not reproducing. If it is blending, in the discontinous XFEM, we just have to integrate on it
-        // like nothing happened.
-        std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra;
-        switch (result.Type)
-        {
-
-        // The element is blending: touches a reproducing element
-        case Gedim::GeometryUtilities::SplitPolyhedronWithPlaneResult::Types::None:
-        {
-            subTetrahedra.push_back(element);
-
-            break;
-        }
-
-        default: // The element is reproducing
-        {
-
-            std::vector<Gedim::GeometryUtilities::Polyhedron> subPolyhedra = geometryUtilities->SplitPolyhedronWithPlaneResultToPolyhedra(result);
-
-
-            // Meshing each sub-polyhedron with tetrahedral elements in order to use a quadrature formula based on tetrahedral ref. element
-            for (unsigned int p = 0; p < subPolyhedra.size(); p++)
-            {
-                if (subPolyhedra.at(p).Vertices.cols() == 4) // the polyhedron is already a tetrahedron
-                {
-                    subTetrahedra.push_back(subPolyhedra.at(p));
-                }
-                else                                         // the polyhedron is not a tetrahedron
-                {
-                    Gedim::MeshMatrices aux_meshData;
-                    Gedim::MeshMatricesDAO aux_mesh(aux_meshData);
-
-                    meshUtilities->CreateTetrahedralMesh(subPolyhedra.at(p).Vertices,
-                                                         subPolyhedra.at(p).Edges,
-                                                         subPolyhedra.at(p).Faces,
-                                                         1,
-                                                         aux_mesh,
-                                                         "Qpfezna");
-
-
-
-                    for (unsigned short int t = 0; t < aux_mesh.Cell3DTotalNumber(); t++)
-                    {
-                        subTetrahedra.push_back(meshUtilities->MeshCell3DToPolyhedron(aux_mesh, t));
-                    }
-
-                }
-
-            }
-
-            break;
-        }
-        }
-
-
-        // Integration of function in every subtetrahedron
-
-        // 1) Determination of quadrature nodes and weigths.
-        const unsigned int quadratureOrder = 2;
-        Eigen::MatrixXd quadraturePointsRef;
-        Eigen::VectorXd quadratureWeightsRef;
-        Gedim::Quadrature_Gauss3D_Tetrahedron::FillPointsAndWeights(quadratureOrder,
-                                                                    quadraturePointsRef,
-                                                                    quadratureWeightsRef);
-
-        Gedim::MapTetrahedron mapping(*geometryUtilities);
-
-        // 2) Computing the integral on each sub-tetrahedron
-        for (unsigned short int t = 0; t < subTetrahedra.size(); t++)
-        {
-            // Mapping the reference quadrature nodes and weights on the t-th sub-tetrahedra
-            const Gedim::MapTetrahedron::MapTetrahedronData mapData = mapping.Compute(subTetrahedra.at(t).Vertices);
-
-            Eigen::MatrixXd mappedPoints = mapping.F(mapData,
-                                                     quadraturePointsRef);
-
-            Eigen::VectorXd mappedWeights = quadratureWeightsRef.array() * mapping.DetJ(mapData,
-                                                                                        quadraturePointsRef).array().abs();
-
-            Eigen::Vector3d GradPhi_i = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
-            Eigen::Vector3d GradPhi_j = Utilities::evaluate3DLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
-
-            double scalarProduct = (this->physicalParameters->getPermeabilityTensorVolume() * GradPhi_j).transpose() * GradPhi_i;
-
-            double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(x_iCoord, *fracture));
-            double Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(x_jCoord, *fracture));
-
-            for (unsigned int q = 0; q < mappedPoints.cols(); q++)
-            {
-                double Psi_q = Utilities::heaviside(Utilities::signedDistanceFunction(mappedPoints.col(q), *fracture));
-                integralValue += mappedWeights(q) * ((Psi_q - Psi_i) * (Psi_q - Psi_j) * scalarProduct);
-            }
-        }
-
-
-        break;
-    }
-    default:
-        break;
-
-    }
-    // ******************************************************************************************************************************
-
-    // Placing the result in the correct entrance of the stiffness matrix
-    M.coeffRef(row, col) += integralValue;
-
-}
-
-void P1MatrixAssembler::constructElement_Rhs(Eigen::VectorXd&      rhs,
-                                             unsigned int          row,
-                                             const unsigned int    globIdNode_i,
-                                             const unsigned int    elementIndex,
-                                             const integrationType type)
+MappingFromReferenceTetrahedronInfo P1MatrixAssembler::MapFromReferenceTetrahedron(const Gedim::GeometryUtilities::Polyhedron element)
 {
-    /*
-     * Gli indici dei DOF/nodi Dirich. sono numerati in pivot seguendo la seguente convenzione:
-     *      1,2,3,4,5...      per i DOF
-     *      -1,-2,-3,-4,-5... per le condizioni di Dirichlet
-     * Ora, voglio mettere il contributo del primo DOF nella prima riga della matrice di rigidezza, ovvero la riga 0.
-     * Di conseguenza, decremento gli indici per avere la loro posizione nella matrice.
-     * */
-    row--;
+    MappingFromReferenceTetrahedronInfo result;
 
-    // The RHS is non zero only for the last row of the block linear system. Therefore, we use the hD mesh.
-    Gedim::MeshMatricesDAO mesh = *this->hD_Mesh;
+    double X0 = element.Vertices(0,0), X1 = element.Vertices(0,1), X2 = element.Vertices(0,2), X3 = element.Vertices(0,3),
+           Y0 = element.Vertices(1,0), Y1 = element.Vertices(1,1), Y2 = element.Vertices(1,2), Y3 = element.Vertices(1,3),
+           Z0 = element.Vertices(2,0), Z1 = element.Vertices(2,1), Z2 = element.Vertices(2,2), Z3 = element.Vertices(2,3);
 
-    // Identification of the current tetrahedron
-    const Gedim::GeometryUtilities::Polyhedron element = meshUtilities->MeshCell3DToPolyhedron(mesh, elementIndex);
+    double detJ = X0*Y1*Z2 - X0*Y2*Z1 - X1*Y0*Z2 + X1*Y2*Z0 + X2*Y0*Z1 - X2*Y1*Z0 - X0*Y1*Z3 +
+                  X0*Y3*Z1 + X1*Y0*Z3 - X1*Y3*Z0 - X3*Y0*Z1 + X3*Y1*Z0 + X0*Y2*Z3 - X0*Y3*Z2 -
+                  X2*Y0*Z3 + X2*Y3*Z0 + X3*Y0*Z2 - X3*Y2*Z0 - X1*Y2*Z3 + X1*Y3*Z2 + X2*Y1*Z3 -
+                  X2*Y3*Z1 - X3*Y1*Z2 + X3*Y2*Z1;
 
-    // Identification of the current (i-th) basis function
-    Eigen::Vector4d lagrangeCoeff = Utilities::lagrangeBasisCoeff3D(mesh.Cell0DCoordinates(globIdNode_i), element);
+    Eigen::Matrix3d Jinv;
 
-    // Identification of the current node coordinates
-    Eigen::Vector3d x_iCoord = mesh.Cell0DCoordinates(globIdNode_i);
+    Jinv << -(Y0*Z2-Y2*Z0-Y0*Z3+Y3*Z0+Y2*Z3-Y3*Z2), (X0*Z2-X2*Z0-X0*Z3+X3*Z0+X2*Z3-X3*Z2), -(X0*Y2-X2*Y0-X0*Y3+X3*Y0+X2*Y3-X3*Y2),
+             (Y0*Z1-Y1*Z0-Y0*Z3+Y3*Z0+Y1*Z3-Y3*Z1), -(X0*Z1-X1*Z0-X0*Z3+X3*Z0+X1*Z3-X3*Z1), (X0*Y1-X1*Y0-X0*Y3+X3*Y0+X1*Y3-X3*Y1),
+            -(Y0*Z1-Y1*Z0-Y0*Z2+Y2*Z0+Y1*Z2-Y2*Z1), (X0*Z1-X1*Z0-X0*Z2+X2*Z0+X1*Z2-X2*Z1), -(X0*Y1-X1*Y0-X0*Y2+X2*Y0+X1*Y2-X2*Y1);
 
-    switch (type) {
-    case integrationType::std:
-    {
+    Jinv = (1.0 / detJ) * Jinv;
 
-        // Preparation of the quadrature formula
-        const unsigned int quadratureOrder = 2;
-        Eigen::MatrixXd quadraturePointsRef;
-        Eigen::VectorXd quadratureWeightsRef;
-        Gedim::Quadrature_Gauss3D_Tetrahedron::FillPointsAndWeights(quadratureOrder,
-                                                                    quadraturePointsRef,
-                                                                    quadratureWeightsRef);
-
-        Gedim::MapTetrahedron mapping(*geometryUtilities);
+    Eigen::Matrix3d JJ = Jinv * Jinv.transpose();
 
 
-        // Mapping the reference quadrature nodes and weights on the tetrahedron
-        const Gedim::MapTetrahedron::MapTetrahedronData mapData = mapping.Compute(element.Vertices);
+    double abs_detJ = fabs(detJ);
 
-        Eigen::MatrixXd mappedPoints = mapping.F(mapData,
-                                                 quadraturePointsRef);
+    result.JJ = JJ;
+    result.abs_detJ = abs_detJ;
 
-        Eigen::VectorXd mappedWeights = quadratureWeightsRef.array() * mapping.DetJ(mapData,
-                                                                                    quadraturePointsRef).array().abs();
+    return result;
 
-
-        // Computing the integral
-        double integralValue = 0.0;
-
-        for (unsigned int q = 0; q < mappedPoints.cols(); q++)
-        {
-            double f_xq = this->physicalParameters->forcingTerm(mappedPoints.col(q), *this->fracture);
-            double phi_xq = Utilities::evaluate3DLagrange(mappedPoints.col(q), lagrangeCoeff);
-            integralValue += mappedWeights(q) * f_xq * phi_xq;
-        }
-
-
-        rhs(row) += integralValue;
-
-        break;
-
-    }
-    case integrationType::enr:
-    {
-        // Preparation of the quadrature formula
-        const unsigned int quadratureOrder = 2;
-        Eigen::MatrixXd quadraturePointsRef;
-        Eigen::VectorXd quadratureWeightsRef;
-        Gedim::Quadrature_Gauss3D_Tetrahedron::FillPointsAndWeights(quadratureOrder,
-                                                                    quadraturePointsRef,
-                                                                    quadratureWeightsRef);
-
-        Gedim::MapTetrahedron mapping(*geometryUtilities);
-
-
-        // Mapping the reference quadrature nodes and weights on the tetrahedron
-        const Gedim::MapTetrahedron::MapTetrahedronData mapData = mapping.Compute(element.Vertices);
-
-        Eigen::MatrixXd mappedPoints = mapping.F(mapData,
-                                                 quadraturePointsRef);
-
-        Eigen::VectorXd mappedWeights = quadratureWeightsRef.array() * mapping.DetJ(mapData,
-                                                                                    quadraturePointsRef).array().abs();
-
-
-        // Computing the integral
-        double integralValue = 0.0;
-        double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(x_iCoord, *fracture));
-
-        for (unsigned int q = 0; q < mappedPoints.cols(); q++)
-        {
-            double Psi_q = Utilities::heaviside(Utilities::signedDistanceFunction(mappedPoints.col(q), *fracture));
-            double f_xq = this->physicalParameters->forcingTerm(mappedPoints.col(q), *fracture);
-            double phi_xq = Utilities::evaluate3DLagrange(mappedPoints.col(q), lagrangeCoeff);
-            integralValue += mappedWeights(q) * f_xq * phi_xq * (Psi_q - Psi_i);
-        }
-
-
-        rhs(row) += integralValue;
-
-        break;
-    }
-    default:
-        break;
-    }
 }
 
 
@@ -910,12 +773,12 @@ void P1MatrixAssembler::assemble_h_h(Eigen::SparseMatrix<double>& Ah,
                 {
                     unsigned int jj = pivot[mesh.Cell2DVertex(e, j)];
 
-                    if (jj > 0)
+//                    if (jj > 0)
 
-                        this->constructElement_AhF(Ah, ii, jj, e);
-                    else
+//                        this->constructElement_AhF(Ah, ii, jj, e);
+//                    else
 
-                        this->constructElement_AhF(Ah_dirich, ii, -jj, e);
+//                        this->constructElement_AhF(Ah_dirich, ii, -jj, e);
 
                 }
             }
@@ -951,92 +814,10 @@ void P1MatrixAssembler::addNeumann(Eigen::VectorXd &rhs)
             int ii = pivot(current_point_id, 0);
 
             if (ii > 0)
-                rhs(ii) += (1 / 3) * averaged_gN * triangle_area;
+                rhs(ii - 1) += (1 / 3) * averaged_gN * triangle_area;
         }
     }
-
-
-
-
-
-
-
 }
-
-
-
-void P1MatrixAssembler::constructElement_AhF(Eigen::SparseMatrix<double>& M,
-                                             const unsigned int row,
-                                             const unsigned int col,
-                                             const unsigned int elementIndex)
-{
-    // We are assembling the A^hF matrix, therefore we use the mesh for the hF variable.
-    Gedim::MeshMatricesDAO mesh = *this->hF_Mesh;
-
-    // Identification of the current triangle as a vector of point global Ids. Retrieval of their coordinates.
-    vector<unsigned int> elementPointsIds = mesh.Cell2DVertices(elementIndex);
-    Eigen::MatrixXd elementPointsCoords;
-    for (unsigned int k = 0; k < elementPointsIds.size(); k++)
-    {
-        elementPointsCoords.col(k) = mesh.Cell0DCoordinates(elementPointsIds.at(k));
-    }
-
-    // Identification of the current test (i-th) basis function
-    Eigen::Vector3d testLagrangeCoeff = Utilities::lagrangeBasisCoeff2D(mesh.Cell0DCoordinates(row), elementPointsCoords);
-
-    // Identification of the current trial (j-th) basis function
-    Eigen::Vector3d trialLagrangeCoeff = Utilities::lagrangeBasisCoeff2D(mesh.Cell0DCoordinates(row), elementPointsCoords);
-
-    // Identification of "test node"'s coordinates
-    Eigen::Vector3d x_jCoord = mesh.Cell0DCoordinates(row);
-
-    // Identification of "trial node"'s coordinates
-    Eigen::Vector3d x_iCoord = mesh.Cell0DCoordinates(col);
-
-    // Integration
-    // Preparation of the quadrature formula
-
-    const unsigned int quadratureOrder = 1;
-    Eigen::MatrixXd quadraturePointsRef;
-    Eigen::VectorXd quadratureWeightsRef;
-    Gedim::Quadrature_Gauss2D_Triangle::FillPointsAndWeights(quadratureOrder,
-                                                             quadraturePointsRef,
-                                                             quadratureWeightsRef);
-
-
-    Gedim::MapTriangle mapping;
-
-    // Mapping the reference quadrature nodes and weights on the tetrahedron
-
-    const Gedim::MapTriangle::MapTriangleData mapData = mapping.Compute(elementPointsCoords);
-
-    Eigen::MatrixXd mappedPoints = mapping.F(mapData,
-                                             quadraturePointsRef);
-
-    Eigen::VectorXd mappedWeights = quadratureWeightsRef.array() * mapping.DetJ(mapData,
-                                                                                quadraturePointsRef).array().abs();
-
-    // Computing the integral
-    double integralValue = 0.0;
-
-    Eigen::Vector2d GradPhi_i = Utilities::evaluate2DLagrangeGrad(mappedPoints.col(0), testLagrangeCoeff);
-    Eigen::Vector2d GradPhi_j = Utilities::evaluate2DLagrangeGrad(mappedPoints.col(0), trialLagrangeCoeff);
-    double scalarProduct = (this->physicalParameters->getPermeabilityTensorFracture() * GradPhi_j).transpose() * GradPhi_i;
-
-    for (unsigned int q = 0; q < mappedPoints.size(); q++)
-    {
-        double Phi_i_q = Utilities::evaluate2DLagrange(mappedPoints.col(q), testLagrangeCoeff);
-        double Phi_j_q = Utilities::evaluate2DLagrange(mappedPoints.col(q), trialLagrangeCoeff);
-
-        integralValue += mappedWeights(q) * (scalarProduct)
-                + mappedWeights(q) * 2 * this->physicalParameters->getNormalTransmissivityFracture() * Phi_i_q * Phi_j_q;
-
-    }
-
-
-    M.coeffRef(row, col) += integralValue;
-}
-
 
 // **************************************************************************************
 
