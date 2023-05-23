@@ -5,6 +5,7 @@ list(APPEND xfem_3d_headers ${CMAKE_CURRENT_SOURCE_DIR}/XfemDofHandler.hpp)
 list(APPEND xfem_3d_headers ${CMAKE_CURRENT_SOURCE_DIR}/Utilities.hpp)
 list(APPEND xfem_3d_headers ${CMAKE_CURRENT_SOURCE_DIR}/PhysicalParameters.hpp)
 list(APPEND xfem_3d_headers ${CMAKE_CURRENT_SOURCE_DIR}/discontinousTestProblem_1.h)
+list(APPEND xfem_3d_headers ${CMAKE_CURRENT_SOURCE_DIR}/setZero.h)
 
 
 list(APPEND xfem_3d_sources ${CMAKE_CURRENT_SOURCE_DIR}/EllipticProblem.cpp)
@@ -14,6 +15,8 @@ list(APPEND xfem_3d_sources ${CMAKE_CURRENT_SOURCE_DIR}/XfemDofHandler.cpp)
 list(APPEND xfem_3d_sources ${CMAKE_CURRENT_SOURCE_DIR}/Utilities.cpp)
 list(APPEND xfem_3d_sources ${CMAKE_CURRENT_SOURCE_DIR}/PhysicalParameters.cpp)
 list(APPEND xfem_3d_sources ${CMAKE_CURRENT_SOURCE_DIR}/discontinousTestProblem_1.cpp)
+list(APPEND xfem_3d_sources ${CMAKE_CURRENT_SOURCE_DIR}/testZero.cpp)
+
 
 
 

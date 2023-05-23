@@ -8,6 +8,7 @@
 #include "Configurations.hpp"
 #include "MeshMatrices.hpp"
 #include "MeshMatricesDAO.hpp"
+#include "MeshDAOImporterFromCsv.hpp"
 #include "MeshUtilities.hpp"
 #include "VTKUtilities.hpp"
 //#include "Eigen_SparseArray.hpp"
@@ -16,6 +17,7 @@
 //#include "Eigen_CholeskySolver.hpp"
 #include "math.h"
 #include "discontinousTestProblem_1.h"
+#include "MeshDAOExporterToCsv.hpp"
 
 #include "Quadrature_Gauss3D_Tetrahedron.hpp"
 #include "MapTetrahedron.hpp"
@@ -130,7 +132,7 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
         vtkUtilities.Export(exportVtuFolder + "/Block.vtu");
     }
 
-
+/*
     // Create block mesh
     Gedim::Output::PrintGenericMessage("Create Block Mesh...", true);
 
@@ -155,6 +157,25 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
 
     Gedim::Output::PrintStatusProgram("Create Block Mesh");
 
+TODO: uncomment (just for imported mesh)
+
+*/
+
+    Gedim::MeshMatrices blockMeshData;
+    Gedim::MeshMatricesDAO blockMesh(blockMeshData);
+
+    Gedim::MeshFromCsvUtilities meshFromCsvUtilities;
+
+    Gedim::MeshFromCsvUtilities::Configuration meshImporterConfiguration;
+    meshImporterConfiguration.Folder = "/home/matteo/Scrivania/code/xfem_3D/debug/NewMesh2";
+    meshImporterConfiguration.FileCell0DsName = "NODI";
+    meshImporterConfiguration.FileCell1DsName = "EDGE";
+    meshImporterConfiguration.FileCell2DsName = "FACE";
+    meshImporterConfiguration.FileCell3DsName = "ELE";
+    Gedim::MeshDAOImporterFromCsv importer(meshFromCsvUtilities);
+
+    importer.Import(meshImporterConfiguration,
+                    blockMesh);
 
     // Create mesh for every 2D fracture in fractureNetwork2D
     Gedim::Output::PrintGenericMessage("Create Fracture Mesh...", true);
@@ -205,15 +226,16 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
                y = point.y(),
                z = point.z();
 
-        bool point_is_dirichlet = (z == 0.0) || (z == 1.0);
+        bool point_is_dirichlet_marker_1 = (z == 0.0), point_is_dirichlet_marker_3 = (z == 1.0);
+        bool point_is_dirichlet = point_is_dirichlet_marker_1 || point_is_dirichlet_marker_3;
 
         if (point_is_dirichlet)
         {
-            blockMesh.Cell0DSetMarker(glob_id_point, 2 * num_Dirichlet_3D + 1);
+            blockMesh.Cell0DSetMarker(glob_id_point, point_is_dirichlet_marker_1 * 1 + point_is_dirichlet_marker_3 * 3);
             num_Dirichlet_3D++;
             pivot(glob_id_point, 0) = -num_Dirichlet_3D;
             pivot(glob_id_point, 1) = -1;
-        }
+        }        
         else
         {
             blockMesh.Cell0DSetMarker(glob_id_point, 0);
@@ -223,10 +245,10 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
         }
     }
 
-    // Costruzione della struttura dati per i triangoli di Neumann
+ /*   // Costruzione della struttura dati per i triangoli di Neumann
     for (unsigned int glob_id_triangle; glob_id_triangle < blockMesh.Cell2DTotalNumber(); glob_id_triangle++)
     {
-        blockMesh.Cell2DSetMarker(glob_id_triangle, -1);
+        blockMesh.Cell2DSetMarker(glob_id_triangle, 0);
 
         std::vector<unsigned int> vertices_global_IDs = blockMesh.Cell2DVertices(glob_id_triangle);
 
@@ -246,6 +268,10 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
         // Faccia di Neumann con marker 2: {x=0}
         if (triangle_lies_on_cube_face_with_marker_2)
         {
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(0), 2);
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(1), 2);
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(2), 2);
+
             blockMesh.Cell2DSetMarker(glob_id_triangle, 2);
             Neumann_triangles.push_back(glob_id_triangle);
         }
@@ -253,6 +279,10 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
         // Faccia di Neumann con marker 4: {x=1}
         if (triangle_lies_on_cube_face_with_marker_4)
         {
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(0), 4);
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(1), 4);
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(2), 4);
+
             blockMesh.Cell2DSetMarker(glob_id_triangle, 4);
             Neumann_triangles.push_back(glob_id_triangle);
         }
@@ -260,6 +290,10 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
         // Faccia di Neumann con marker 6: {y=0}
         if (triangle_lies_on_cube_face_with_marker_6)
         {
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(0), 6);
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(1), 6);
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(2), 6);
+
             blockMesh.Cell2DSetMarker(glob_id_triangle, 6);
             Neumann_triangles.push_back(glob_id_triangle);
         }
@@ -267,11 +301,44 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
         // Faccia di Neumann con marker 8: {y=1}
         if (triangle_lies_on_cube_face_with_marker_8)
         {
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(0), 8);
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(1), 8);
+            blockMesh.Cell0DSetMarker(vertices_global_IDs.at(2), 8);
+
             blockMesh.Cell2DSetMarker(glob_id_triangle, 8);
             Neumann_triangles.push_back(glob_id_triangle);
         }
     }
     // ***************************************************************************************************
+
+    // Esportazione dei vettori marker per Scialò -----------------------------------------
+    const string markerExportDirectory = exportFolder + "/MarkerFiles";
+    Gedim::Output::CreateFolder(markerExportDirectory);
+
+    const string cell0DMarkerFileName = markerExportDirectory + "/Cell0DMarker.txt";
+    const string cell2DMarkerFileName = markerExportDirectory + "/Cell2DMarker.txt";
+    ofstream streamMarkerFile_0D(cell0DMarkerFileName, std::ofstream::out);
+    ofstream streamMarkerFile_2D(cell2DMarkerFileName, std::ofstream::out);
+
+
+    if (streamMarkerFile_0D.is_open())
+    {
+        for (unsigned int n = 0; n < blockMesh.Cell0DTotalNumber(); n++)
+            streamMarkerFile_0D << n << " " << blockMesh.Cell0DMarker(n) << endl;
+
+        streamMarkerFile_0D.close();
+    }
+    if (streamMarkerFile_2D.is_open())
+    {
+        for (unsigned int c = 0; c < blockMesh.Cell0DTotalNumber(); c++)
+            streamMarkerFile_2D << c << " " << blockMesh.Cell2DMarker(c) << endl;
+
+        streamMarkerFile_2D.close();
+    } else std::cout << "Problem with opening marker file";
+ TODO uncomment */
+
+    // ------------------------------------------------------------------------------------
+
 
     // COSTRUZIONE DEL VETTORE PIVOT PER LA MESH PER LA VARIABILE h **************************************
     Eigen::VectorXi fracturePivot(fractureMesh.Cell0DTotalNumber());
@@ -336,7 +403,7 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
     if (numDofs3D > 0)
     {
         assembler->assemble_hD_hD(AhD, AhD_dirich, GhD, GhD_dirich, rightHandSide);
-        assembler->addNeumann(rightHandSide);
+        // assembler->addNeumann(rightHandSide); TODO uncomment
     }
 
 
@@ -379,6 +446,40 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
     }
     else std::cout << "Problem with opening info file";
 
+    // Funziona, but...
+//    Gedim::MeshFromCsvUtilities utilities;
+//    const string mesh_file_path = exportMatrFolder + "/meshData";
+//    const string mesh_0D_neighbours_file_path = exportMatrFolder + "/0D_neighbours";
+//    const string mesh_1D_neighbours_file_path = exportMatrFolder + "/1D_neighbours";
+//    const string mesh_2D_neighbours_file_path = exportMatrFolder + "/2D_neighbours";
+//    const string mesh_3D_neighbours_file_path = exportMatrFolder + "/3D_neighbours";
+//    const char* separator = ",";
+//    utilities.ExportCell3Ds(mesh_file_path,
+//                            *separator,
+//                            blockMesh);
+//    utilities.ExportCell0DNeighbours(mesh_0D_neighbours_file_path,
+//                                     *separator,
+//                                     blockMesh);
+//    utilities.ExportCell1DNeighbours(mesh_1D_neighbours_file_path,
+//                                     *separator,
+//                                     blockMesh);
+//    utilities.ExportCell2DNeighbours(mesh_2D_neighbours_file_path,
+//                                     *separator,
+//                                     blockMesh);
+
+/*
+    Gedim::MeshFromCsvUtilities utilities;
+    Gedim::MeshFromCsvUtilities::Configuration config_exporter;
+    config_exporter.Folder = exportMatrFolder + "/meshData";
+    Gedim::MeshDAOExporterToCsv exporter(utilities);
+    exporter.Export(config_exporter, blockMesh);
+
+TODO: uncomment (just for imported mesh)*/
+
+
+
+
+
     // ***************************************************************************************
 
 
@@ -396,7 +497,7 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
 
         solution = choleskySolver.solve(rightHandSide);
 
-        exactSolution = DiscontinousTestProblem_1::exactSolution(blockMesh.Cell0DsCoordinates(),
+        exactSolution = testZero::exactSolution(blockMesh.Cell0DsCoordinates(),
                                                                     numDOF_3D_std,
                                                                     pivot,
                                                                     fractureNetwork.at(0));

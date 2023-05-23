@@ -28,7 +28,7 @@ class Fracture3D
     inline Eigen::Matrix3d getRotation()    { return this->rotation; }
 
     inline Eigen::Vector3d getOrigin() { return this->polygon(Eigen::seq(0,2), 0); }
-    bool intersects(Gedim::GeometryUtilities::Polyhedron element);
+    double intersects(Gedim::GeometryUtilities::Polyhedron element);
 
 
 };

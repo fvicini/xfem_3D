@@ -31,7 +31,7 @@ int main(int argc, char** argv)
   // ************************************************************************************************
   // Problema test discontinuo con il quale testiamo l'andamento dell'errore previsto dalla teoria.
 
-  double max_volumes[] = {0.05, 0.007, 0.001};
+  double max_volumes[] = {0.001};
   list<error_result> results;
 
   for (double v : max_volumes)

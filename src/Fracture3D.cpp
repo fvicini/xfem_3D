@@ -17,7 +17,7 @@ Fracture3D::Fracture3D(Vector3d p1, Vector3d p2, Vector3d p3, Gedim::GeometryUti
                                                                 this->translation);
 };
 
-bool Fracture3D::intersects(Gedim::GeometryUtilities::Polyhedron element)
+double Fracture3D::intersects(Gedim::GeometryUtilities::Polyhedron element)
 {
     Vector3d normal = this->normal;
     Vector3d x = this->getOrigin();
@@ -40,18 +40,13 @@ bool Fracture3D::intersects(Gedim::GeometryUtilities::Polyhedron element)
     double min_sd = *min_element(signed_distances.begin(),
                                  signed_distances.end());
 
-    if (max_sd * min_sd < 0)
-    {
-        // element is cut by the fracture
-        return true;
-    }
+//    if (max_sd * min_sd < 0)
+//    {
+//        // element is cut by the fracture
+//        return true;
+//    }
 
-    return false;
-
-
-
-
-
+    return max_sd * min_sd;
 }
 
 

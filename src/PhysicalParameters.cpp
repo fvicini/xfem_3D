@@ -1,4 +1,6 @@
 #include "PhysicalParameters.hpp"
+#include "setZero.h"
+
 
 namespace XFEM_3D {
 
@@ -52,7 +54,7 @@ double PhysicalParameters::getNormalTransmissivityFracture() const
 
 double PhysicalParameters::forcingTerm(Eigen::Vector3d pointCoords, Fracture3D fracture)
     {
-        return DiscontinousTestProblem_1::forcingTerm(pointCoords, fracture);
+        return testZero::forcingTerm(pointCoords, fracture);
     }
 
 double PhysicalParameters::forcingTermAveragedOnTetrahedron(Eigen::MatrixXd tetrahedronVertices, Fracture3D fracture)
