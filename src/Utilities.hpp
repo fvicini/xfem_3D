@@ -13,7 +13,7 @@ namespace Utilities
 
     double signedDistanceFunction(Eigen::Vector3d point, Fracture3D& fracture);
 
-    int heaviside(double x);
+    double heaviside(double x);
 
     std::vector<Gedim::GeometryUtilities::Polyhedron> splitTetrahedronInSubTetrahedra(Gedim::GeometryUtilities::Polyhedron elementAsPolyhedron,
                                                                                        Fracture3D *fracture,

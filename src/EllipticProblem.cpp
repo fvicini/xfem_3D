@@ -314,35 +314,6 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
     }
     // ***************************************************************************************************
 
- /*
-    // Esportazione dei vettori marker per Scialò -----------------------------------------
-    const string markerExportDirectory = exportFolder + "/MarkerFiles";
-    Gedim::Output::CreateFolder(markerExportDirectory);
-
-    const string cell0DMarkerFileName = markerExportDirectory + "/Cell0DMarker.txt";
-    const string cell2DMarkerFileName = markerExportDirectory + "/Cell2DMarker.txt";
-    ofstream streamMarkerFile_0D(cell0DMarkerFileName, std::ofstream::out);
-    ofstream streamMarkerFile_2D(cell2DMarkerFileName, std::ofstream::out);
-
-
-    if (streamMarkerFile_0D.is_open())
-    {
-        for (unsigned int n = 0; n < blockMesh.Cell0DTotalNumber(); n++)
-            streamMarkerFile_0D << n << " " << blockMesh.Cell0DMarker(n) << endl;
-
-        streamMarkerFile_0D.close();
-    }
-    if (streamMarkerFile_2D.is_open())
-    {
-        for (unsigned int c = 0; c < blockMesh.Cell0DTotalNumber(); c++)
-            streamMarkerFile_2D << c << " " << blockMesh.Cell2DMarker(c) << endl;
-
-        streamMarkerFile_2D.close();
-    } else std::cout << "Problem with opening marker file";
- TODO uncomment */
-
-    // ------------------------------------------------------------------------------------
-
 
     // COSTRUZIONE DEL VETTORE PIVOT PER LA MESH PER LA VARIABILE h **************************************
     Eigen::VectorXi fracturePivot(fractureMesh.Cell0DTotalNumber());
@@ -451,26 +422,7 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
     }
     else std::cout << "Problem with opening info file";
 
-    // Funziona, but...
-//    Gedim::MeshFromCsvUtilities utilities;
-//    const string mesh_file_path = exportMatrFolder + "/meshData";
-//    const string mesh_0D_neighbours_file_path = exportMatrFolder + "/0D_neighbours";
-//    const string mesh_1D_neighbours_file_path = exportMatrFolder + "/1D_neighbours";
-//    const string mesh_2D_neighbours_file_path = exportMatrFolder + "/2D_neighbours";
-//    const string mesh_3D_neighbours_file_path = exportMatrFolder + "/3D_neighbours";
-//    const char* separator = ",";
-//    utilities.ExportCell3Ds(mesh_file_path,
-//                            *separator,
-//                            blockMesh);
-//    utilities.ExportCell0DNeighbours(mesh_0D_neighbours_file_path,
-//                                     *separator,
-//                                     blockMesh);
-//    utilities.ExportCell1DNeighbours(mesh_1D_neighbours_file_path,
-//                                     *separator,
-//                                     blockMesh);
-//    utilities.ExportCell2DNeighbours(mesh_2D_neighbours_file_path,
-//                                     *separator,
-//                                     blockMesh);
+
 
 /*
     Gedim::MeshFromCsvUtilities utilities;
@@ -480,11 +432,6 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
     exporter.Export(config_exporter, blockMesh);
 
 TODO: uncomment (just for imported mesh)*/
-
-
-
-
-
     // ***************************************************************************************
 
 

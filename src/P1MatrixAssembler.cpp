@@ -6,7 +6,7 @@
 
 #include "discontinousTestProblem_1.h"
 
-#define DEBUG_CONSTANT 12
+#define DEBUG_CONSTANT 42
 #define GEOMETRIC_TOLERANCE 1.0e-6
 
 namespace XFEM_3D
@@ -55,13 +55,10 @@ void P1MatrixAssembler::initializeEnrichmentInformation(unsigned int numDOF_3D_s
     Eigen::MatrixXi*       pivot3D = this->hD_Pivot;
 
 
-    // Vettore di 0,1 (false, true). Numero di righe = numero di celle. Ci dice una data cella è tagliata
-    // dalla frattura (quindi da arricchire) oppure no.
+    // Vettore di bool. Numero di righe = numero di celle. Valore: cella da tagliare si/no.
     this->toEnrich_elements = new Eigen::SparseMatrix<unsigned int>(mesh3D->Cell3DTotalNumber(), 1);
 
 
-    // Ogni volta che troviamo una cella da arricchire, si aggiungono sempre esattamente 4 gradi di libertà di arricchimento.
-    // Per numerare i DOF arricchiti è dunque sufficiente 'appendere' in coda alla lista di DOF gli arricchimenti.
     unsigned int global_counter_for_enriched_nodes = 0;
 
 
@@ -81,7 +78,7 @@ void P1MatrixAssembler::initializeEnrichmentInformation(unsigned int numDOF_3D_s
             // Setto l'elemento 'e' come da arricchire.
             this->toEnrich_elements->insert(e, 0) = 1;
 
-
+            /* OLD
             // Numerazione dei DOF arricchiti
             for (unsigned int n = 0; n <= 3; n++)
             {
@@ -98,58 +95,36 @@ void P1MatrixAssembler::initializeEnrichmentInformation(unsigned int numDOF_3D_s
                     (*pivot3D)(glob_id_node, 1) = nn_enr;
                 }
             }
-
-            // OLD
-            /*
-            // Recupero l'Id globale dei punti del tetraedro corrente.
-            unsigned int globIdNode1 = mesh3D->Cell3DVertex(e, 0),
-                         globIdNode2 = mesh3D->Cell3DVertex(e, 1),
-                         globIdNode3 = mesh3D->Cell3DVertex(e, 2),
-                         globIdNode4 = mesh3D->Cell3DVertex(e, 3);
-
-
-            // Calcolo l'indice del loro DOF di arricchimento.
-            unsigned int nn1_enr, nn2_enr, nn3_enr, nn4_enr;
-
-            bool node_1_still_to_be_numbered = (*pivot3D)(globIdNode1, 1) < 0,
-                 node_2_still_to_be_numbered = (*pivot3D)(globIdNode2, 1) < 0,
-                 node_3_still_to_be_numbered = (*pivot3D)(globIdNode3, 1) < 0,
-                 node_4_still_to_be_numbered = (*pivot3D)(globIdNode4, 1) < 0;
-
-
-            if (node_1_still_to_be_numbered)
-            {
-                global_counter_for_enriched_nodes++;
-                nn1_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
-                (*pivot3D)(globIdNode1, 1) = nn1_enr;
-            }
-
-            if (node_2_still_to_be_numbered)
-            {
-                global_counter_for_enriched_nodes++;
-                nn2_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
-                (*pivot3D)(globIdNode2, 1) = nn2_enr;
-            }
-
-            if (node_3_still_to_be_numbered)
-            {
-                global_counter_for_enriched_nodes++;
-                nn3_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
-                (*pivot3D)(globIdNode3, 1) = nn3_enr;
-            }
-
-            if (node_4_still_to_be_numbered)
-            {
-                global_counter_for_enriched_nodes++;
-                nn4_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
-                (*pivot3D)(globIdNode4, 1) = nn4_enr;
-            }
             */
 
+            // -----------------------------------------------------------------------
+            // NEW:
+            // Marko con '1' i i nodi da arricchire nella seconda colonna di pivot
+            for (unsigned int n = 0; n <= 3; n++)
+            {
+                unsigned int glob_id_node = mesh3D->Cell3DVertex(e, n);
+
+                bool node_still_to_be_numbered = (*pivot3D)(glob_id_node, 1) < 0;
+
+                if (node_still_to_be_numbered)
+                    (*pivot3D)(glob_id_node, 1) = 1;
+            }
+            // -----------------------------------------------------------------------
         }
     }
-
-    this->num_enrichments = global_counter_for_enriched_nodes;
+    // -----------------------------------------------------------------------
+    // NEW:
+    int counter = 0;
+    for (unsigned int n = 0; n < mesh3D->Cell0DTotalNumber(); n++)
+    {
+        if((*pivot3D)(n, 1) == 1)
+        {
+            (*pivot3D)(n, 1) = numDOF_3D_std + counter + 1;
+            counter++;
+        }
+    }
+    // -----------------------------------------------------------------------
+    this->num_enrichments = counter;
 }
 
 
@@ -200,14 +175,9 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
     Eigen::MatrixXi pivot = *this->hD_Pivot;
 
     Eigen::Matrix<double, 3, 8> GradPhi;
-    /*
     GradPhi << -1, 1, 0, 0, -1, 1, 0, 0,
                -1, 0, 1, 0, -1, 0, 1, 0,
                -1, 0, 0, 1, -1, 0, 0, 1;
-    */
-    GradPhi << 1,-1,0,0,1,-1,0,0,
-               0,-1,1,0,0,-1,1,0,
-               0,-1,0,1,0,-1,0,1;
 
 
     Eigen::Matrix3d nu = this->physicalParameters->getPermeabilityTensorVolume();
@@ -301,13 +271,13 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
         // # Put A_e local entries into global stiffness matrix + construct right hand side.
         for (unsigned int i = 0; i <= 7; i++)
         {
-            int is_enr_i = int(i > 3);
+            bool is_enr_i = i > 3;
             unsigned int id_i = blockMesh.Cell3DVertex(e, i % 4);
             int ii = pivot(id_i, is_enr_i);
 
             for (unsigned int j = 0; j <= 7; j++)
             {
-                int is_enr_j = int(j > 3);
+                bool is_enr_j = j > 3;
                 unsigned int id_j = blockMesh.Cell3DVertex(e, j % 4);
                 int jj = pivot(id_j, is_enr_j);
 
@@ -315,7 +285,7 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                 {
                     if (jj > 0)
                     {
-                        AhD.coeffRef(ii-1, jj-1) = A_e(i, j);
+                        AhD.coeffRef(ii-1, jj-1) += A_e(i, j);
                     }
                     else
                     {
@@ -414,7 +384,7 @@ void P1MatrixAssembler::addNeumann(Eigen::VectorXd &rhs)
         Eigen::MatrixXd trianglePoints_coordinates = mesh.Cell2DVerticesCoordinates(triangle_glob_id);
 
         Eigen::MatrixXd rotatedTo2D_TrianglePoints_coordinates = this->geometryUtilities->RotatePointsFrom3DTo2D(trianglePoints_coordinates,
-                                                                                                                 this->geometryUtilities->PlaneRotationMatrix(this->geometryUtilities->PolygonNormal(trianglePoints_coordinates)));
+                        this->geometryUtilities->PlaneRotationMatrix(this->geometryUtilities->PolygonNormal(trianglePoints_coordinates)));
 
         double triangle_area = this->geometryUtilities->PolygonArea(rotatedTo2D_TrianglePoints_coordinates);
 

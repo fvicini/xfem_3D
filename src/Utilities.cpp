@@ -24,12 +24,12 @@ namespace Utilities
 
 
 
-    int heaviside (double input)
+    double heaviside (double input)
     {
         if (input > 0)
-            return 1;
+            return 1.0;
         else
-            return -1;
+            return -1.0;
     }
 
 
@@ -124,7 +124,7 @@ namespace Utilities
             {
                 if (i < 4 && j < 4)
                 {
-                    k_enr(i,j) = 1;
+                    k_enr(i,j) = 1.0;
                 }
 
                 if (i < 4 && j > 4)
@@ -159,10 +159,10 @@ namespace Utilities
                 }
             }
         }
-
         return k_enr;
     }
-}
 
-}
+} // namespace Utilities
+
+} // namespace XFEM_3D
 
