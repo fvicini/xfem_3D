@@ -30,8 +30,6 @@ namespace XFEM_3D
       { return Gedim::Configurations::GetPropertyValue<double>("GeometricTolerance"); }
       inline double MeshMaximumTetrahedronVolume() const
       { return Gedim::Configurations::GetPropertyValue<double>("MeshMaximumTetrahedronVolume"); }
-      inline double Pippo() const
-      { return Gedim::Configurations::GetPropertyValue<int>("Pippo"); }
   };
 
 

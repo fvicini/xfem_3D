@@ -9,17 +9,6 @@
 namespace XFEM_3D
 {
 
-typedef struct
-{
-
-
-} constructBlockDomainAndMeshResultType;
-
-typedef struct
-{
-
-} setBoundaryConditionsResultType;
-
 namespace DiscontinousTestProblem_1
 {
 

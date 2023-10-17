@@ -1,4 +1,5 @@
 #include "Utilities.hpp"
+#include<tuple>
 
 namespace XFEM_3D
 {
@@ -25,10 +26,10 @@ namespace Utilities
 
     int heaviside (double input)
     {
-        if (input >= 0)
+        if (input > 0)
             return 1;
         else
-            return 0;
+            return -1;
     }
 
 
@@ -99,6 +100,67 @@ namespace Utilities
         }
 
         return subTetrahedra;
+    }
+
+
+
+    Eigen::Matrix<double, 8, 8> compute_k_enr(Eigen::Vector3d x_st,
+                                              Gedim::GeometryUtilities::Polyhedron element,
+                                              Fracture3D* fracture)
+    {
+        Eigen::Matrix<double, 8, 8> k_enr;
+        k_enr  << 0,0,0,0,0,0,0,0,
+                  0,0,0,0,0,0,0,0,
+                  0,0,0,0,0,0,0,0,
+                  0,0,0,0,0,0,0,0,
+                  0,0,0,0,0,0,0,0,
+                  0,0,0,0,0,0,0,0,
+                  0,0,0,0,0,0,0,0,
+                  0,0,0,0,0,0,0,0;
+
+        for (unsigned int i = 0; i < 8; i++)
+        {
+            for (unsigned int j = 0; j < 8; j++)
+            {
+                if (i < 4 && j < 4)
+                {
+                    k_enr(i,j) = 1;
+                }
+
+                if (i < 4 && j > 4)
+                {
+                    int j_tilde = j % 4;
+                    Eigen::Vector3d x_j_tilde = element.Vertices.col(j_tilde);
+
+                    k_enr(i,j) = Utilities::heaviside(Utilities::signedDistanceFunction(x_st, *fracture))
+                                    - Utilities::heaviside(Utilities::signedDistanceFunction(x_j_tilde, *fracture));
+                }
+
+                if (i > 4 && j < 4)
+                {
+                    int i_tilde = i % 4;
+                    Eigen::Vector3d x_i_tilde = element.Vertices.col(i_tilde);
+
+                    k_enr(i,j) = Utilities::heaviside(Utilities::signedDistanceFunction(x_st, *fracture))
+                                    - Utilities::heaviside(Utilities::signedDistanceFunction(x_i_tilde, *fracture));
+                }
+
+                if (i > 4 && j > 4)
+                {
+                    int i_tilde = i % 4, j_tilde = j % 4;
+
+                    Eigen::Vector3d x_i_tilde = element.Vertices.col(i_tilde),
+                                    x_j_tilde = element.Vertices.col(j_tilde);
+
+                    k_enr(i,j) = (Utilities::heaviside(Utilities::signedDistanceFunction(x_st, *fracture))
+                                     - Utilities::heaviside(Utilities::signedDistanceFunction(x_i_tilde, *fracture)))
+                               * (Utilities::heaviside(Utilities::signedDistanceFunction(x_st, *fracture))
+                                  - Utilities::heaviside(Utilities::signedDistanceFunction(x_j_tilde, *fracture)));
+                }
+            }
+        }
+
+        return k_enr;
     }
 }
 

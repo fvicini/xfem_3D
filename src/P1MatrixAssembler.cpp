@@ -2,6 +2,9 @@
 #include "Quadrature_Gauss3D_Tetrahedron.hpp"
 #include "MapTetrahedron.hpp"
 #include "Utilities.hpp"
+#include <string>
+
+#include "discontinousTestProblem_1.h"
 
 #define DEBUG_CONSTANT 12
 #define GEOMETRIC_TOLERANCE 1.0e-6
@@ -66,19 +69,9 @@ void P1MatrixAssembler::initializeEnrichmentInformation(unsigned int numDOF_3D_s
     {
         const Gedim::GeometryUtilities::Polyhedron elementAsPolyhedron = this->meshUtilities->MeshCell3DToPolyhedron(*mesh3D, e);
 
-        /*
-         * fatti ritornare da intersects il prodotto di min_SD * max_SD -> se è circa zero
-         * elemento troppo vicino per arricchirlo. Togli i controlli su nodo_i_too_close che non hanno senso
-        */
         double product = this->fracture->intersects(elementAsPolyhedron);
         bool fracture_intersects_element_not_too_close = fabs(product) >= GEOMETRIC_TOLERANCE && product < 0;
 
-
-
-        if (e == 3)
-        {
-            std::cout << "stop" << std::endl;
-        }
 
         if (fracture_intersects_element_not_too_close)
         {
@@ -88,11 +81,32 @@ void P1MatrixAssembler::initializeEnrichmentInformation(unsigned int numDOF_3D_s
             // Setto l'elemento 'e' come da arricchire.
             this->toEnrich_elements->insert(e, 0) = 1;
 
+
+            // Numerazione dei DOF arricchiti
+            for (unsigned int n = 0; n <= 3; n++)
+            {
+                unsigned int glob_id_node = mesh3D->Cell3DVertex(e, n);
+
+                int nn_enr;
+
+                bool node_still_to_be_numbered = (*pivot3D)(glob_id_node, 1) < 0;
+
+                if (node_still_to_be_numbered)
+                {
+                    global_counter_for_enriched_nodes++;
+                    nn_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
+                    (*pivot3D)(glob_id_node, 1) = nn_enr;
+                }
+            }
+
+            // OLD
+            /*
             // Recupero l'Id globale dei punti del tetraedro corrente.
             unsigned int globIdNode1 = mesh3D->Cell3DVertex(e, 0),
                          globIdNode2 = mesh3D->Cell3DVertex(e, 1),
                          globIdNode3 = mesh3D->Cell3DVertex(e, 2),
                          globIdNode4 = mesh3D->Cell3DVertex(e, 3);
+
 
             // Calcolo l'indice del loro DOF di arricchimento.
             unsigned int nn1_enr, nn2_enr, nn3_enr, nn4_enr;
@@ -102,38 +116,35 @@ void P1MatrixAssembler::initializeEnrichmentInformation(unsigned int numDOF_3D_s
                  node_3_still_to_be_numbered = (*pivot3D)(globIdNode3, 1) < 0,
                  node_4_still_to_be_numbered = (*pivot3D)(globIdNode4, 1) < 0;
 
-            bool node_1_too_close_to_interface = false;//fabs(Utilities::signedDistanceFunction(mesh3D->Cell0DCoordinates(globIdNode1), *fracture)) < GEOMETRIC_TOLERANCE,
-            bool node_2_too_close_to_interface = false;//fabs(Utilities::signedDistanceFunction(mesh3D->Cell0DCoordinates(globIdNode2), *fracture)) < GEOMETRIC_TOLERANCE,
-            bool node_3_too_close_to_interface = false;//fabs(Utilities::signedDistanceFunction(mesh3D->Cell0DCoordinates(globIdNode3), *fracture)) < GEOMETRIC_TOLERANCE,
-            bool node_4_too_close_to_interface = false;//fabs(Utilities::signedDistanceFunction(mesh3D->Cell0DCoordinates(globIdNode4), *fracture)) < GEOMETRIC_TOLERANCE;
 
-            if (node_1_still_to_be_numbered && !node_1_too_close_to_interface)
+            if (node_1_still_to_be_numbered)
             {
                 global_counter_for_enriched_nodes++;
                 nn1_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
                 (*pivot3D)(globIdNode1, 1) = nn1_enr;
             }
 
-            if (node_2_still_to_be_numbered && !node_2_too_close_to_interface)
+            if (node_2_still_to_be_numbered)
             {
                 global_counter_for_enriched_nodes++;
                 nn2_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
                 (*pivot3D)(globIdNode2, 1) = nn2_enr;
             }
 
-            if (node_3_still_to_be_numbered && !node_3_too_close_to_interface)
+            if (node_3_still_to_be_numbered)
             {
                 global_counter_for_enriched_nodes++;
                 nn3_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
                 (*pivot3D)(globIdNode3, 1) = nn3_enr;
             }
 
-            if (node_4_still_to_be_numbered && !node_4_too_close_to_interface)
+            if (node_4_still_to_be_numbered)
             {
                 global_counter_for_enriched_nodes++;
                 nn4_enr = numDOF_3D_std + global_counter_for_enriched_nodes;
                 (*pivot3D)(globIdNode4, 1) = nn4_enr;
             }
+            */
 
         }
     }
@@ -183,755 +194,139 @@ void P1MatrixAssembler::assemble_hD_hD(Eigen::SparseMatrix<double>& AhD,
                                        Eigen::SparseMatrix<double>& AhD_dirich,
                                        Eigen::SparseMatrix<double>& GhD,
                                        Eigen::SparseMatrix<double>& GhD_dirich,
-                                       Eigen::VectorXd&             rightHandSide)
+                                       Eigen::VectorXd& rightHandSide)
 {
-
     Gedim::MeshMatricesDAO blockMesh = *this->hD_Mesh;
     Eigen::MatrixXi pivot = *this->hD_Pivot;
 
-    Eigen::Matrix<double, 3, 4> GradPhi;
+    Eigen::Matrix<double, 3, 8> GradPhi;
+    /*
+    GradPhi << -1, 1, 0, 0, -1, 1, 0, 0,
+               -1, 0, 1, 0, -1, 0, 1, 0,
+               -1, 0, 0, 1, -1, 0, 0, 1;
+    */
+    GradPhi << 1,-1,0,0,1,-1,0,0,
+               0,-1,1,0,0,-1,1,0,
+               0,-1,0,1,0,-1,0,1;
 
-    GradPhi << -1, 1, 0, 0,
-               -1, 0, 1, 0,
-               -1, 0, 0, 1;
 
     Eigen::Matrix3d nu = this->physicalParameters->getPermeabilityTensorVolume();
 
     for (unsigned int e = 0; e < blockMesh.Cell3DTotalNumber(); e++)
     {
+        Gedim::GeometryUtilities::Polyhedron element_as_polyhedron = meshUtilities->MeshCell3DToPolyhedron(blockMesh, e);
 
-        bool elementCutByFracture = this->toEnrich_elements->coeff(e, 0);
+        bool element_cut_by_fracture = this->toEnrich_elements->coeff(e, 0);
 
-        const Gedim::GeometryUtilities::Polyhedron element = meshUtilities->MeshCell3DToPolyhedron(blockMesh, e);
-        Eigen::Vector3d tetrahedronBarycenter = geometryUtilities->PolyhedronBarycenter(element.Vertices);
-
-        MappingFromReferenceTetrahedronInfo mapping = this->MapFromReferenceTetrahedron(element);
-        double abs_detJ    = mapping.abs_detJ;
+        MappingFromReferenceTetrahedronInfo mapping = this->MapFromReferenceTetrahedron(element_as_polyhedron);
         Eigen::Matrix3d JJ = mapping.JJ;
 
+        // Se il tetraedro è tagliato dalla frattura, dovrò integrare su una sua sotto-partizione. Per semplicità, costruisco una lista
+        // sub_tetrahedra, nella quale, se l'elemento è da tagliare, ci saranno i sottotetraedro; altrimenti (se non è da tagliare), ci
+        // sarà l'elemento stesso.
+        std::list<Gedim::GeometryUtilities::Polyhedron> sub_tetrahedra;
+        std::vector<Eigen::Matrix<double, 8, 8>> k_enr_list;
+        if (element_cut_by_fracture)
+        {
+            std::vector<Gedim::GeometryUtilities::Polyhedron> tmp = Utilities::splitTetrahedronInSubTetrahedra(element_as_polyhedron,
+                                                                                                               this->fracture,
+                                                                                                               this->geometryUtilities,
+                                                                                                               this->meshUtilities);
+            std::copy(tmp.begin(), tmp.end(), std::back_inserter(sub_tetrahedra));
+        }
+        else
+            sub_tetrahedra.push_back(element_as_polyhedron);
 
-        // Cycle on the test function index
-        for (unsigned short int i = 0; i < 4; i++)
+
+        // Determine the mask matrix k_enr (one for each sub-tetrahedron)
+        for (auto& sub_t : sub_tetrahedra)
+        {
+            Eigen::Vector3d x_st = geometryUtilities->PolyhedronBarycenter(sub_t.Vertices);
+            Eigen::Matrix<double, 8, 8> k_enr = Utilities::compute_k_enr(x_st, element_as_polyhedron,
+                                                                         this->fracture);
+            k_enr_list.push_back(k_enr);
+        }
+
+
+        // Local matrix A_e construction
+        Eigen::Matrix<double, 8, 8> A_e;
+        Eigen::Vector<double, 8> rhs_e;
+        A_e << 0,0,0,0,0,0,0,0,
+               0,0,0,0,0,0,0,0,
+               0,0,0,0,0,0,0,0,
+               0,0,0,0,0,0,0,0,
+               0,0,0,0,0,0,0,0,
+               0,0,0,0,0,0,0,0,
+               0,0,0,0,0,0,0,0,
+               0,0,0,0,0,0,0,0;
+
+        rhs_e << 0,0,0,0,0,0,0,0;
+
+        for (unsigned int i = 0; i <= 7; i++)
         {
             Eigen::Vector3d gradPhi_i = GradPhi.col(i);
 
-            int globIdNode_i = blockMesh.Cell3DVertex(e, i);
-            int ii_std = pivot(globIdNode_i, 0);
-
-            bool i_node_is_DOF = ii_std > 0;
-            bool i_node_is_to_enrich =  pivot(globIdNode_i, 1) > 0;
-
-            if (i_node_is_DOF) // Comprende: 1A, 1B, 3A, 3B, 2, 4, 5, 6
+            for (unsigned int j = 0; j <= 7; j++)
             {
+                Eigen::Vector3d gradPhi_j = GradPhi.col(j);
 
-                if (i_node_is_to_enrich)
+                unsigned int st = 0;
+                for (auto& sub_t : sub_tetrahedra)
                 {
-                    unsigned int ii_enr = pivot(globIdNode_i, 1);
+                    Eigen::Matrix<double, 4, 4> vol_matrix;
 
-                    // Cycling on the trial function index
-                    for (unsigned short int j = 0; j < 4; j++)                        
+                    vol_matrix << sub_t.Vertices.col(0).x(), sub_t.Vertices.col(1).x(), sub_t.Vertices.col(2).x(), sub_t.Vertices.col(3).x(),
+                                  sub_t.Vertices.col(0).y(), sub_t.Vertices.col(1).y(), sub_t.Vertices.col(2).y(), sub_t.Vertices.col(3).y(),
+                                  sub_t.Vertices.col(0).z(), sub_t.Vertices.col(1).z(), sub_t.Vertices.col(2).z(), sub_t.Vertices.col(3).z(),
+                                  1, 1, 1, 1;
+
+                    double sub_t_volume = (1.0 / 6.0) * fabs(vol_matrix.determinant());
+
+                    Eigen::Matrix<double, 8, 8> k_enr = k_enr_list.at(st);
+
+                    // Matrix
+                    A_e(i, j) += sub_t_volume * (nu * gradPhi_i).dot(JJ * gradPhi_j) * k_enr(i, j);
+
+                    // Right hand side
+                    double averaged_f = this->physicalParameters->forcingTermAveragedOnTetrahedron(sub_t.Vertices,
+                                                                                                   *this->fracture);
+                    rhs_e(i) += (1.0 / 4.0) * sub_t_volume * averaged_f * k_enr(i, 0);
+
+                    st++;
+                }
+            }
+
+        }
+
+        // # Put A_e local entries into global stiffness matrix + construct right hand side.
+        for (unsigned int i = 0; i <= 7; i++)
+        {
+            int is_enr_i = int(i > 3);
+            unsigned int id_i = blockMesh.Cell3DVertex(e, i % 4);
+            int ii = pivot(id_i, is_enr_i);
+
+            for (unsigned int j = 0; j <= 7; j++)
+            {
+                int is_enr_j = int(j > 3);
+                unsigned int id_j = blockMesh.Cell3DVertex(e, j % 4);
+                int jj = pivot(id_j, is_enr_j);
+
+                if (ii > 0)
+                {
+                    if (jj > 0)
                     {
-                        Eigen::Vector3d gradPhi_j = GradPhi.col(j);
-
-                        int globIdNode_j = blockMesh.Cell3DVertex(e, j);
-                        int jj_std = pivot(globIdNode_j, 0);
-
-
-                        bool j_node_is_DOF = jj_std > 0;
-                        bool j_node_is_to_enrich =  pivot(globIdNode_j, 1) > 0;
-
-
-                        if (j_node_is_DOF)
-                        {
-                            if (j_node_is_to_enrich)
-                            {
-                                if (elementCutByFracture)
-                                {
-                                    // CASISTICA 1A DELLA DOCUMENTAZIONE ============================================================================================
-
-                                    double integralValue_ss_Ahd = 0.0,
-                                           integralValue_se_Ahd = 0.0,
-                                           integralValue_es_Ahd = 0.0,
-                                           integralValue_ee_Ahd = 0.0;
-
-                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
-
-                                    integralValue_ss_Ahd = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    {
-                                        double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                              *fracture)),
-                                               Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                               *fracture));
-
-                                        std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
-                                                                                                                                                     fracture,
-                                                                                                                                                     this->geometryUtilities,
-                                                                                                                                                     this->meshUtilities);
-                                        for(auto& subTetrahedron : subTetrahedra)
-                                        {
-                                            Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
-                                            double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
-
-                                            Eigen::Matrix<double, 4, 4> subTetrahedronVerticesMatrix;
-
-                                            subTetrahedronVerticesMatrix << element.Vertices.col(0).x(), element.Vertices.col(1).x(), element.Vertices.col(2).x(), element.Vertices.col(3).x(),
-                                                                            element.Vertices.col(0).y(), element.Vertices.col(1).y(), element.Vertices.col(2).y(), element.Vertices.col(3).y(),
-                                                                            element.Vertices.col(0).z(), element.Vertices.col(1).z(), element.Vertices.col(2).z(), element.Vertices.col(3).z(),
-                                                                            1,                           1,                           1,                           1;
-
-                                            double subTetrahedronVolume = (1.0 / 6.0) * fabs(subTetrahedronVerticesMatrix.determinant());
-
-                                            integralValue_es_Ahd += (Psi - Psi_i) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                            integralValue_se_Ahd += (Psi - Psi_j) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                            integralValue_ee_Ahd += (Psi - Psi_i) * (Psi - Psi_j) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                        }
-
-                                        AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
-                                        AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
-                                        AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
-                                        AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
-                                    }
-                                    // (FINE CASISTICA 1A) ===================================================================================================
-                                }
-
-                                else
-                                {
-                                    // CASISTICA 1B DELLA DOCUMENTAZIONE =====================================================================================
-
-                                    double integralValue_ss_Ahd = 0.0,
-                                           integralValue_se_Ahd = 0.0,
-                                           integralValue_es_Ahd = 0.0,
-                                           integralValue_ee_Ahd = 0.0;
-
-
-                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
-
-                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                          *fracture)),
-                                           Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                           *fracture)),
-                                           Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
-
-
-                                    integralValue_ss_Ahd = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                    integralValue_es_Ahd = (Psi - Psi_i) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                    integralValue_se_Ahd = (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                    integralValue_ee_Ahd = (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
-                                    AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
-                                    AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
-                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
-
-                                    // (FINE CASISTICA 1B) ===================================================================================================
-                                }
-                            }
-                            else // Il nodo j non è da arricchire
-                            {
-
-                                if (elementCutByFracture)
-                                {
-                                    // CASISTICA 2A DELLA DOCUMENTAZIONE ==========================================================================================
-
-                                    double integralValue_ss_Ahd = 0.0,
-                                            integralValue_es_Ahd = 0.0;
-
-                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                          *fracture)),
-                                            Psi   = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter,
-                                                                                                           *fracture));
-                                    std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
-                                                                                                                                                 fracture,
-                                                                                                                                                 this->geometryUtilities,
-                                                                                                                                                 this->meshUtilities);
-                                    integralValue_ss_Ahd = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    for(auto& subTetrahedron : subTetrahedra)
-                                    {
-                                        Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
-                                        double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
-
-                                        Eigen::Matrix<double, 4, 4> subTetrahedronVerticesMatrix;
-
-                                        subTetrahedronVerticesMatrix << element.Vertices.col(0).x(), element.Vertices.col(1).x(), element.Vertices.col(2).x(), element.Vertices.col(3).x(),
-                                                element.Vertices.col(0).y(), element.Vertices.col(1).y(), element.Vertices.col(2).y(), element.Vertices.col(3).y(),
-                                                element.Vertices.col(0).z(), element.Vertices.col(1).z(), element.Vertices.col(2).z(), element.Vertices.col(3).z(),
-                                                1,                           1,                           1,                           1;
-
-                                        double subTetrahedronVolume = (1.0 / 6.0) * fabs(subTetrahedronVerticesMatrix.determinant());
-
-                                        integralValue_es_Ahd += (Psi - Psi_i) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                    }
-
-                                    AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
-                                    AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
-
-                                    // (FINE CASISTICA 2A) ========================================================================================================
-                                }
-
-                                else
-                                {
-                                    // CASISTICA 2B DELLA DOCUMENTAZIONE ==========================================================================================
-
-                                    double integralValue_ss_Ahd = 0.0,
-                                            integralValue_es_Ahd = 0.0;
-
-                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                          *fracture)),
-                                            Psi   = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter,
-                                                                                                           *fracture));
-
-                                    integralValue_ss_Ahd = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                    integralValue_es_Ahd = (Psi - Psi_i) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
-                                    AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
-
-                                    // (FINE CASISTICA 2B) ========================================================================================================
-
-                                }
-
-                            }
-
-                        }
-                        else  // Il nodo j è di Dirichlet. Può ancora essere da arricchire e portare contributo coi suoi DOF enr.
-                        {
-                            /*
-                             *   this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
-                             *
-                             *   this->constructElement_AhD(AhD_dirich, ii_enr, -jj_std, ii_std, -jj_std, e, integrationType::enr_std);
-                            */
-
-                            if (j_node_is_to_enrich)
-                            {
-                                if (elementCutByFracture)
-                                {
-                                    // CASISTICA 3A DELLA DOCUMENTAZIONE =====================================================================================
-
-                                    double integralValue_se_Ahd = 0.0,
-                                           integralValue_ee_Ahd = 0.0;
-
-                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                          *fracture)),
-                                           Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                           *fracture));
-
-                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
-
-                                    std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
-                                                                                                                                                 fracture,
-                                                                                                                                                 this->geometryUtilities,
-                                                                                                                                                 this->meshUtilities);
-                                    for(auto& subTetrahedron : subTetrahedra)
-                                    {
-                                        Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
-                                        double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
-
-                                        Eigen::Matrix<double, 4, 4> subTetrahedronVerticesMatrix;
-
-                                        subTetrahedronVerticesMatrix << element.Vertices.col(0).x(), element.Vertices.col(1).x(), element.Vertices.col(2).x(), element.Vertices.col(3).x(),
-                                                                        element.Vertices.col(0).y(), element.Vertices.col(1).y(), element.Vertices.col(2).y(), element.Vertices.col(3).y(),
-                                                                        element.Vertices.col(0).z(), element.Vertices.col(1).z(), element.Vertices.col(2).z(), element.Vertices.col(3).z(),
-                                                                        1,                           1,                           1,                           1;
-
-                                        double subTetrahedronVolume = (1.0 / 6.0) * fabs(subTetrahedronVerticesMatrix.determinant());
-
-                                        integralValue_se_Ahd += (Psi - Psi_j) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                        integralValue_ee_Ahd += (Psi - Psi_i) * (Psi - Psi_j) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    }
-                                    AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
-                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
-
-                                    // (FINE CASISTICA 3A) ===================================================================================================
-                                }
-                                else
-                                {
-                                    // CASISTICA 3B DELLA DOCUMENTAZIONE =====================================================================================
-
-                                    double integralValue_se_Ahd = 0.0,
-                                           integralValue_ee_Ahd = 0.0;
-
-                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                          *fracture)),
-                                           Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                           *fracture));
-
-                                    double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
-
-                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
-
-                                    integralValue_se_Ahd = (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                    integralValue_ee_Ahd = (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
-                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
-
-                                    // (FINE CASISTICA 3B) ===================================================================================================
-
-                                }
-                            }
-                        }
-                    }
-
-                    // COSTRUZIONE RHS =======================================================================================================================
-                    // ii_std
-                    double averaged_f = this->physicalParameters->forcingTermAveragedOnTetrahedron(element.Vertices, *fracture);
-                    rightHandSide(ii_std - 1) += averaged_f * abs_detJ * (1.0 / 24.0);
-
-                    // ii_enr
-                    double integralValue_rhs_enr = 0.0;
-                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                          *fracture));
-                    if (elementCutByFracture)
-                    {
-                        std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
-                                                                                                                                     fracture,
-                                                                                                                                     this->geometryUtilities,
-                                                                                                                                     this->meshUtilities);
-                        for(auto& subTetrahedron : subTetrahedra)
-                        {
-                            Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
-                            double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
-
-                            // TODO
-
-                            Eigen::Matrix<double, 4, 4> subTetrahedronVerticesMatrix;
-
-                            subTetrahedronVerticesMatrix << element.Vertices.col(0).x(), element.Vertices.col(1).x(), element.Vertices.col(2).x(), element.Vertices.col(3).x(),
-                                                            element.Vertices.col(0).y(), element.Vertices.col(1).y(), element.Vertices.col(2).y(), element.Vertices.col(3).y(),
-                                                            element.Vertices.col(0).z(), element.Vertices.col(1).z(), element.Vertices.col(2).z(), element.Vertices.col(3).z(),
-                                                            1,                           1,                           1,                           1;
-
-                            double subTetrahedronVolume = (1.0 / 6.0) * fabs(subTetrahedronVerticesMatrix.determinant());
-
-                            integralValue_rhs_enr += (Psi - Psi_i) * averaged_f * abs_detJ * (1.0 / 24.0);
-
-                        }
-
-                        rightHandSide(ii_enr - 1) = integralValue_rhs_enr;
-
+                        AhD.coeffRef(ii-1, jj-1) = A_e(i, j);
                     }
                     else
                     {
-                        double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i), *fracture));
-                        double Psi   = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
-
-                        rightHandSide(ii_enr - 1) = (Psi - Psi_i) * averaged_f * abs_detJ * (1.0 / 24.0);
-                    }
-                    // (FINE COSTRUZIONE RHS) =================================================================================================================
-
-                }
-
-                else // Il nodo (e,i) NON è da arricchire.
-                {
-                    for (unsigned short int j = 0; j < 4; j++)
-                    {
-                        Eigen::Vector3d gradPhi_j = GradPhi.col(j);
-
-                        int globIdNode_j = blockMesh.Cell3DVertex(e, j);
-                        int jj_std = pivot(globIdNode_j, 0);
-
-                        bool j_node_is_DOF = jj_std > 0;
-                        bool j_node_is_to_enrich =  pivot(globIdNode_j, 1) > 0;
-
-                        if (j_node_is_DOF)
-                        {
-                            if (j_node_is_to_enrich)
-                            {
-                                unsigned int jj_enr = pivot(globIdNode_j, 1);
-
-                                if (elementCutByFracture)
-                                {
-                                    // CASISTICA 4A DELLA DOCUMENTAZIONE =====================================================================================
-
-                                    double integralValue_ss_Ahd = 0.0,
-                                            integralValue_se_Ahd = 0.0;
-
-                                    double Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                          *fracture));
-
-                                    std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
-                                                                                                                                                 fracture,
-                                                                                                                                                 this->geometryUtilities,
-                                                                                                                                                 this->meshUtilities);
-
-                                    integralValue_ss_Ahd  = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    for(auto& subTetrahedron : subTetrahedra)
-                                    {
-                                        Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
-                                        double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
-
-                                        Eigen::Matrix<double, 4, 4> subTetrahedronVerticesMatrix;
-
-                                        subTetrahedronVerticesMatrix << element.Vertices.col(0).x(), element.Vertices.col(1).x(), element.Vertices.col(2).x(), element.Vertices.col(3).x(),
-                                                                        element.Vertices.col(0).y(), element.Vertices.col(1).y(), element.Vertices.col(2).y(), element.Vertices.col(3).y(),
-                                                                        element.Vertices.col(0).z(), element.Vertices.col(1).z(), element.Vertices.col(2).z(), element.Vertices.col(3).z(),
-                                                                        1,                           1,                           1,                           1;
-
-                                        double subTetrahedronVolume = (1.0 / 6.0) * fabs(subTetrahedronVerticesMatrix.determinant());
-
-                                        integralValue_se_Ahd += (Psi - Psi_j) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                    }
-
-                                    AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
-                                    AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
-
-                                    // (FINE CASISTICA 4A) ===================================================================================================
-                                }
-
-                                else
-                                {
-                                    // CASISTICA 4B DELLA DOCUMENTAZIONE =====================================================================================
-
-                                    double integralValue_ss_Ahd = 0.0,
-                                            integralValue_se_Ahd = 0.0;
-
-                                    double Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                          *fracture)),
-                                            Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
-
-                                    integralValue_ss_Ahd = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                    integralValue_se_Ahd = (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
-                                    AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
-
-                                    // (FINE CASISTICA 4B) ===================================================================================================
-                                }
-                            }
-
-
-                            else // Il nodo j non è da arricchire
-                            {
-                                // CASISTICA 5 DELLA DOCUMENTAZIONE =====================================================================================
-
-                                double integralValue_ss_Ahd = 0.0;
-
-                                integralValue_ss_Ahd = (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                AhD.coeffRef(ii_std - 1, jj_std - 1) += integralValue_ss_Ahd;
-
-                                // (FINE CASISTICA 5) ===================================================================================================
-
-                            }
-
-                        }
-
-                        else // Il nodo j è di Dirichlet
-                        {
-                            // this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, ii_std, -jj_std, e, integrationType::std_std);
-
-                            if (j_node_is_to_enrich)
-                            {
-
-                                if (elementCutByFracture)
-                                {
-                                    // CASISTICA 6A DELLA DOCUMENTAZIONE =======================================================================================
-
-                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
-
-                                    double integralValue_se_Ahd = 0.0;
-
-                                    double Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                          *fracture));
-
-                                    std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
-                                                                                                                                                 fracture,
-                                                                                                                                                 this->geometryUtilities,
-                                                                                                                                                 this->meshUtilities);
-
-                                    for(auto& subTetrahedron : subTetrahedra)
-                                    {
-                                        Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
-                                        double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
-
-                                        Eigen::Matrix<double, 4, 4> subTetrahedronVerticesMatrix;
-
-                                        subTetrahedronVerticesMatrix << element.Vertices.col(0).x(), element.Vertices.col(1).x(), element.Vertices.col(2).x(), element.Vertices.col(3).x(),
-                                                                        element.Vertices.col(0).y(), element.Vertices.col(1).y(), element.Vertices.col(2).y(), element.Vertices.col(3).y(),
-                                                                        element.Vertices.col(0).z(), element.Vertices.col(1).z(), element.Vertices.col(2).z(), element.Vertices.col(3).z(),
-                                                                        1,                           1,                           1,                           1;
-
-                                        double subTetrahedronVolume = (1.0 / 6.0) * fabs(subTetrahedronVerticesMatrix.determinant());
-
-                                        integralValue_se_Ahd += (Psi - Psi_j) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                    }
-
-                                    AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
-
-                                    // (FINE CASISTICA 6BA =====================================================================================================
-
-                                }
-
-                                else
-                                {
-                                    // CASISTICA 6B DELLA DOCUMENTAZIONE =======================================================================================
-
-                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
-
-                                    double integralValue_se_Ahd = 0.0;
-
-                                    double Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                          *fracture)),
-                                            Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
-
-                                    integralValue_se_Ahd = (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    AhD.coeffRef(ii_std - 1, jj_enr - 1) += integralValue_se_Ahd;
-
-                                    // (FINE CASISTICA 6B) =====================================================================================================
-                                }
-                            }
-                        }
+                        //AhD_dirich.coeffRef(ii-1, -jj-1) = A_e(i, j);
                     }
 
-                    // Costruzione RHS per il DOF ii_std
-                    double averaged_f = this->physicalParameters->forcingTermAveragedOnTetrahedron(element.Vertices, *fracture);
-
-                    rightHandSide(ii_std - 1) += averaged_f * abs_detJ * (1.0 / 24.0);
-
-                }
-
-            }
-
-            else // Il nodo i non è un DOF. Comprende: 7A, 7B, 8, 9
-            {
-                if (i_node_is_to_enrich)
-                {
-                    unsigned int ii_enr = pivot(globIdNode_i, 1);
-
-                    // Cycling on the trial function index
-                    for (unsigned short int j = 0; j < 4; j++)
-                    {
-                        Eigen::Vector3d gradPhi_j = GradPhi.col(j);
-
-                        int globIdNode_j = blockMesh.Cell3DVertex(e, j);
-                        int jj_std = pivot(globIdNode_j, 0);
-
-                        bool j_node_is_DOF = jj_std > 0;
-                        bool j_node_is_to_enrich =  pivot(globIdNode_j, 1) > 0;
-
-                        if (j_node_is_DOF)
-                        {
-                            if (j_node_is_to_enrich)
-                            {
-                                if (elementCutByFracture)
-                                {
-
-                                    // CASISTICA 7A DELLA DOCUMENTAZIONE ============================================================================================
-
-                                    double integralValue_es_Ahd = 0.0,
-                                           integralValue_ee_Ahd = 0.0;
-
-                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                          *fracture)),
-                                           Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                           *fracture));
-
-                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
-
-                                    std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
-                                                                                                                                                 fracture,
-                                                                                                                                                 this->geometryUtilities,
-                                                                                                                                                 this->meshUtilities);
-                                    for(auto& subTetrahedron : subTetrahedra)
-                                    {
-                                        Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
-                                        double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
-
-                                        Eigen::Matrix<double, 4, 4> subTetrahedronVerticesMatrix;
-
-                                        subTetrahedronVerticesMatrix << element.Vertices.col(0).x(), element.Vertices.col(1).x(), element.Vertices.col(2).x(), element.Vertices.col(3).x(),
-                                                                        element.Vertices.col(0).y(), element.Vertices.col(1).y(), element.Vertices.col(2).y(), element.Vertices.col(3).y(),
-                                                                        element.Vertices.col(0).z(), element.Vertices.col(1).z(), element.Vertices.col(2).z(), element.Vertices.col(3).z(),
-                                                                        1,                           1,                           1,                           1;
-
-                                        double subTetrahedronVolume = (1.0 / 6.0) * fabs(subTetrahedronVerticesMatrix.determinant());
-
-                                        integralValue_es_Ahd += (Psi - Psi_i) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                        integralValue_ee_Ahd += (Psi - Psi_i) * (Psi - Psi_j) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    }
-                                    AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
-                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
-
-                                    // (FINE CASISTICA 7A) ===================================================================================================
-                                }
-
-                                else
-                                {
-                                    // CASISTICA 7B DELLA DOCUMENTAZIONE ============================================================================================
-
-                                    double integralValue_es_Ahd = 0.0,
-                                           integralValue_ee_Ahd = 0.0;
-
-                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
-
-                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                          *fracture)),
-                                           Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                           *fracture));
-                                    double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
-
-                                    integralValue_es_Ahd = (Psi - Psi_i) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                    integralValue_ee_Ahd = (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
-                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
-
-                                    // (FINE CASISTICA 7B) ===================================================================================================
-                                }
-
-                            }
-
-                            else // Il nodo j non è da arricchire
-                            {
-                                if (elementCutByFracture)
-                                {
-                                    // CASISTICA 8A DELLA DOCUMENTAZIONE ==========================================================================================
-
-                                    double integralValue_es_Ahd = 0.0;
-
-                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                          *fracture));
-
-                                    std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
-                                                                                                                                                 fracture,
-                                                                                                                                                 this->geometryUtilities,
-                                                                                                                                                 this->meshUtilities);
-
-                                    for(auto& subTetrahedron : subTetrahedra)
-                                    {
-                                        Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
-                                        double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
-
-                                        Eigen::Matrix<double, 4, 4> subTetrahedronVerticesMatrix;
-
-                                        subTetrahedronVerticesMatrix << element.Vertices.col(0).x(), element.Vertices.col(1).x(), element.Vertices.col(2).x(), element.Vertices.col(3).x(),
-                                                                        element.Vertices.col(0).y(), element.Vertices.col(1).y(), element.Vertices.col(2).y(), element.Vertices.col(3).y(),
-                                                                        element.Vertices.col(0).z(), element.Vertices.col(1).z(), element.Vertices.col(2).z(), element.Vertices.col(3).z(),
-                                                                        1,                           1,                           1,                           1;
-
-                                        double subTetrahedronVolume = (1.0 / 6.0) * fabs(subTetrahedronVerticesMatrix.determinant());
-
-                                        integralValue_es_Ahd += (Psi - Psi_i) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    }
-                                    AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
-
-                                    // (FINE CASISTICA 8A) ========================================================================================================
-                                }
-
-                                else
-                                {
-                                    // CASISTICA 8B DELLA DOCUMENTAZIONE ==========================================================================================
-
-                                    double integralValue_es_Ahd = 0.0;
-
-                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                          *fracture)),
-                                            Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
-
-                                    integralValue_es_Ahd = (Psi - Psi_i) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    AhD.coeffRef(ii_enr - 1, jj_std - 1) += integralValue_es_Ahd;
-
-                                    // (FINE CASISTICA 8B) ========================================================================================================
-                                }
-                            }
-                        }
-
-                        else  // Anche j è nodo di Dirichlet.
-                        {
-                            //  this->constructElement_AhD(AhD_dirich, ii_std, -jj_std, -ii_std, -jj_std, e, integrationType::std_std);
-
-                            //  this->constructElement_AhD(AhD_dirich, ii_enr, -jj_std, -ii_std, -jj_std, e, integrationType::enr_std);
-
-                            if (j_node_is_to_enrich)
-                            {
-                                if (elementCutByFracture)
-                                {
-                                    // CASISTICA 9A DELLA DOCUMENTAZIONE =====================================================================================
-
-                                    double integralValue_ee_Ahd = 0.0;
-
-                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
-
-                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                          *fracture)),
-                                            Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                           *fracture));
-
-                                    std::vector<Gedim::GeometryUtilities::Polyhedron> subTetrahedra = Utilities::splitTetrahedronInSubTetrahedra(element,
-                                                                                                                                                 fracture,
-                                                                                                                                                 this->geometryUtilities,
-                                                                                                                                                 this->meshUtilities);
-                                    for(auto& subTetrahedron : subTetrahedra)
-                                    {
-                                        Eigen::Vector3d subTetrahedronBarycenter = this->geometryUtilities->PolyhedronBarycenter(subTetrahedron.Vertices);
-                                        double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(subTetrahedronBarycenter, *fracture));
-
-                                        Eigen::Matrix<double, 4, 4> subTetrahedronVerticesMatrix;
-
-                                        subTetrahedronVerticesMatrix << element.Vertices.col(0).x(), element.Vertices.col(1).x(), element.Vertices.col(2).x(), element.Vertices.col(3).x(),
-                                                                        element.Vertices.col(0).y(), element.Vertices.col(1).y(), element.Vertices.col(2).y(), element.Vertices.col(3).y(),
-                                                                        element.Vertices.col(0).z(), element.Vertices.col(1).z(), element.Vertices.col(2).z(), element.Vertices.col(3).z(),
-                                                                        1,                           1,                           1,                           1;
-
-                                        double subTetrahedronVolume = (1.0 / 6.0) * fabs(subTetrahedronVerticesMatrix.determinant());
-
-                                        integralValue_ee_Ahd += (Psi - Psi_i) * (Psi - Psi_j) * subTetrahedronVolume * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-                                    }
-
-                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
-
-                                    // (FINE CASISTICA 9A) ===================================================================================================
-                                }
-                                else
-                                {
-                                    // CASISTICA 9B DELLA DOCUMENTAZIONE =====================================================================================
-
-                                    double integralValue_ee_Ahd = 0.0;
-
-                                    unsigned int jj_enr = pivot(globIdNode_j, 1);
-
-                                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i),
-                                                                                                          *fracture)),
-                                            Psi_j = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_j),
-                                                                                                           *fracture));
-
-                                    double Psi = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
-
-                                    integralValue_ee_Ahd = (Psi - Psi_i) * (Psi - Psi_j) * (1.0 / 6.0) * abs_detJ * (nu * gradPhi_j).transpose() * JJ * gradPhi_i;
-
-                                    AhD.coeffRef(ii_enr - 1, jj_enr - 1) += integralValue_ee_Ahd;
-
-                                    // (FINE CASISTICA 9B) ===================================================================================================
-                                }
-                            }
-                        }
-                    }
-
-                    // COSTRUZIONE RHS =======================================================================================================================
-
-                    double averaged_f = this->physicalParameters->forcingTermAveragedOnTetrahedron(element.Vertices, *fracture);
-                    double Psi_i = Utilities::heaviside(Utilities::signedDistanceFunction(blockMesh.Cell0DCoordinates(globIdNode_i), *fracture));
-                    double Psi   = Utilities::heaviside(Utilities::signedDistanceFunction(tetrahedronBarycenter, *fracture));
-
-                    rightHandSide(ii_enr - 1) += (Psi - Psi_i) * averaged_f * abs_detJ * (1.0 / 24.0);
-
-                    // (FINE COSTRUZIONE RHS) =================================================================================================================
-
-
+                    rightHandSide(ii-1) = rhs_e(i);
                 }
             }
         }
     }
-
 }
 
 
@@ -1038,7 +433,6 @@ void P1MatrixAssembler::addNeumann(Eigen::VectorXd &rhs)
         }
     }
 }
-
 // **************************************************************************************
 
 

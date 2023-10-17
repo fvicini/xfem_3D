@@ -4,8 +4,7 @@
 #include "GeometryUtilities.hpp"
 #include "Utilities.hpp"
 #include "Fracture3D.hpp"
-#include "discontinousTestProblem_1.h"
-#include "setZero.h"
+
 
 namespace XFEM_3D {
 

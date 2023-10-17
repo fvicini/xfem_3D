@@ -20,6 +20,9 @@ namespace Utilities
                                                                                        Gedim::GeometryUtilities *geometryUtilities,
                                                                                        Gedim::MeshUtilities *meshUtilities);
 
+    Eigen::Matrix<double, 8, 8> compute_k_enr(Eigen::Vector3d x_st,
+                                              Gedim::GeometryUtilities::Polyhedron element,
+                                              Fracture3D* fracture);
 
 }
 }

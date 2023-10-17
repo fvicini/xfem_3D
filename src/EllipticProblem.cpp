@@ -19,8 +19,9 @@
 #include "discontinousTestProblem_1.h"
 #include "MeshDAOExporterToCsv.hpp"
 
-#include "Quadrature_Gauss3D_Tetrahedron.hpp"
-#include "MapTetrahedron.hpp"
+//#include "Quadrature_Gauss3D_Tetrahedron.hpp"
+//#include "MapTetrahedron.hpp"
+#define __IMPORT__
 
 using namespace std;
 using namespace Eigen;
@@ -95,7 +96,7 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
                                                                                               1.0);
 
     // Create fracture network (here only one is appended to the vector)
-    const unsigned int num_fractures = 1;
+    const unsigned int  num_fractures = 1;
     vector<Fracture3D*> fractureNetwork;
     vector<MatrixXd>    fractureNetwork2D;
 
@@ -132,7 +133,8 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
         vtkUtilities.Export(exportVtuFolder + "/Block.vtu");
     }
 
-/*
+#ifndef __IMPORT__
+
     // Create block mesh
     Gedim::Output::PrintGenericMessage("Create Block Mesh...", true);
 
@@ -147,27 +149,21 @@ result_for_error_estimate EllipticProblem::Run(double max_volume_tetrahedra)
                                         blockMesh,
                                         "Qpqfenza");
 
-// al posto di max_volume_tetrahedra: config.MeshMaximumTetrahedronVolume().
-
-    // Export the block mesh
-    meshUtilities.ExportMeshToVTU(blockMesh,
-                                  exportVtuFolder,
-                                  "Block_Mesh");
+    // al posto di max_volume_tetrahedra: config.MeshMaximumTetrahedronVolume().
 
 
     Gedim::Output::PrintStatusProgram("Create Block Mesh");
 
-TODO: uncomment (just for imported mesh)
+#endif
 
-*/
-
+#ifdef __IMPORT__
     Gedim::MeshMatrices blockMeshData;
     Gedim::MeshMatricesDAO blockMesh(blockMeshData);
 
     Gedim::MeshFromCsvUtilities meshFromCsvUtilities;
 
     Gedim::MeshFromCsvUtilities::Configuration meshImporterConfiguration;
-    meshImporterConfiguration.Folder = "/home/matteo/Scrivania/code/xfem_3D/debug/NewMesh2";
+    meshImporterConfiguration.Folder = "/home/matteo/Scrivania/code/xfem_3D/debug/NewMesh3";
     meshImporterConfiguration.FileCell0DsName = "NODI";
     meshImporterConfiguration.FileCell1DsName = "EDGE";
     meshImporterConfiguration.FileCell2DsName = "FACE";
@@ -176,6 +172,13 @@ TODO: uncomment (just for imported mesh)
 
     importer.Import(meshImporterConfiguration,
                     blockMesh);
+#endif
+
+
+    // Export the block mesh
+    meshUtilities.ExportMeshToVTU(blockMesh,
+                                  exportVtuFolder,
+                                  "Block_Mesh");
 
     // Create mesh for every 2D fracture in fractureNetwork2D
     Gedim::Output::PrintGenericMessage("Create Fracture Mesh...", true);
@@ -184,17 +187,17 @@ TODO: uncomment (just for imported mesh)
     Gedim::MeshMatricesDAO fractureMesh(fractureMeshData);
 
     meshUtilities.CreateTriangularMesh(fractureNetwork2D.at(0),
-                                        0.1,
-                                        fractureMesh);
+                                       0.1,
+                                       fractureMesh);
 
 
-    // Export the block mesh
+    //Export the fracure mesh
 
-    //    meshUtilities.ExportMeshToVTU(fractureMesh,
-    //                                  exportVtuFolder,
-    //                                  "Fracture_Mesh");
+    meshUtilities.ExportMeshToVTU(fractureMesh,
+                                  exportVtuFolder,
+                                  "Fracture_Mesh");
 
-    //    Gedim::Output::PrintStatusProgram("Create Fracture Mesh");
+    //   Gedim::Output::PrintStatusProgram("Create Fracture Mesh");
 
     Gedim::Output::PrintGenericMessage("Compute block geometric properties...", true);
 
@@ -245,7 +248,7 @@ TODO: uncomment (just for imported mesh)
         }
     }
 
- /*   // Costruzione della struttura dati per i triangoli di Neumann
+    // Costruzione della struttura dati per i triangoli di Neumann
     for (unsigned int glob_id_triangle; glob_id_triangle < blockMesh.Cell2DTotalNumber(); glob_id_triangle++)
     {
         blockMesh.Cell2DSetMarker(glob_id_triangle, 0);
@@ -311,6 +314,7 @@ TODO: uncomment (just for imported mesh)
     }
     // ***************************************************************************************************
 
+ /*
     // Esportazione dei vettori marker per Scialò -----------------------------------------
     const string markerExportDirectory = exportFolder + "/MarkerFiles";
     Gedim::Output::CreateFolder(markerExportDirectory);
@@ -395,6 +399,7 @@ TODO: uncomment (just for imported mesh)
     Eigen::VectorXd rightHandSide(numDofs3D);
     Eigen::VectorXd solution(numDofs3D), exactSolution;
 
+
     // Per evitare che ci siano valori inizializzati a 'nan'.
     rightHandSide.setZero();
 
@@ -403,7 +408,7 @@ TODO: uncomment (just for imported mesh)
     if (numDofs3D > 0)
     {
         assembler->assemble_hD_hD(AhD, AhD_dirich, GhD, GhD_dirich, rightHandSide);
-        // assembler->addNeumann(rightHandSide); TODO uncomment
+        assembler->addNeumann(rightHandSide);
     }
 
 
@@ -485,7 +490,6 @@ TODO: uncomment (just for imported mesh)*/
 
 
     // SOLUZIONE DEL SISTEMA LINEARE *********************************************************
-
     if (numDofs3D > 0)
     {
         SimplicialLLT<Eigen::SparseMatrix<double>> choleskySolver;
@@ -497,7 +501,7 @@ TODO: uncomment (just for imported mesh)*/
 
         solution = choleskySolver.solve(rightHandSide);
 
-        exactSolution = testZero::exactSolution(blockMesh.Cell0DsCoordinates(),
+        exactSolution = DiscontinousTestProblem_1::exactSolution(blockMesh.Cell0DsCoordinates(),
                                                                     numDOF_3D_std,
                                                                     pivot,
                                                                     fractureNetwork.at(0));
